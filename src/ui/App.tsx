@@ -33,6 +33,7 @@ import { StatusBar } from "./StatusBar.js";
 import { HelpOverlay } from "./HelpOverlay.js";
 import { ErrorOverlay } from "./ErrorOverlay.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
+import { colors } from "./theme.js";
 
 type Mode = "normal" | "filter" | "help" | "confirm-delete" | "copy" | "error";
 
@@ -588,8 +589,15 @@ export function App({ initial, paths }: Props) {
     4,
     frameRows - headerLines - dialogLines - statusLines - logRendered
   );
-  // Reserve room for the files panel so the branch list can't crowd it out.
-  const filesReserve = !selBranch ? 0 : noParent ? 2 : 6;
+  // Reserve room for the files panel so the branch list can't crowd it out —
+  // but only while the branch list still fits the shared budget with that
+  // reserve in place. On a short screen with many PRs the list would overflow,
+  // and there we prioritise showing PRs: drop to a minimal reserve so more PR
+  // rows fit. The files panel keeps a small minimum and can be focused+scrolled.
+  const desiredFilesReserve = !selBranch ? 0 : noParent ? 2 : 6;
+  const minFilesReserve = !selBranch ? 0 : noParent ? 2 : 3;
+  const branchesFit = rows.length <= listsBudget - desiredFilesReserve;
+  const filesReserve = branchesFit ? desiredFilesReserve : minFilesReserve;
   const branchBudget = Math.max(3, listsBudget - filesReserve);
   const branchScroll = rows.length > branchBudget;
   // When scrolling, two rows go to the ↑/↓ indicators.
@@ -645,6 +653,15 @@ export function App({ initial, paths }: Props) {
     <Box flexDirection="column" paddingX={1} height={frameRows} overflow="hidden">
       <Box flexDirection="column" flexShrink={0}>
         <Header repoRoot={data.repoRoot} busy={busy} width={contentWidth} />
+
+        <Box>
+          <Text color={focus === "branches" ? colors.current : "gray"}>
+            {focus === "branches" ? "▾" : "▸"}{" "}
+          </Text>
+          <Text bold color={focus === "branches" ? colors.current : undefined}>
+            pull requests
+          </Text>
+        </Box>
 
         <StackGraph
           rows={rows}
