@@ -10,9 +10,17 @@ interface Props {
   selected: boolean;
   /** Max width available for the title column. */
   titleWidth: number;
+  /** True when restacking this branch is predicted to conflict. */
+  conflicted?: boolean;
 }
 
-export function BranchRow({ row, columnCount, selected, titleWidth }: Props) {
+export function BranchRow({
+  row,
+  columnCount,
+  selected,
+  titleWidth,
+  conflicted,
+}: Props) {
   const cells = buildGutter(row, columnCount);
   const { branch } = row;
   const badge = prBadge(branch.pr);
@@ -62,9 +70,11 @@ export function BranchRow({ row, columnCount, selected, titleWidth }: Props) {
       <Box flexGrow={1} />
 
       {/* right-aligned metadata */}
-      {branch.needsRestack && (
+      {conflicted ? (
+        <Text color={colors.conflict} bold> ⚠ conflict</Text>
+      ) : branch.needsRestack ? (
         <Text color={colors.needsRestack} bold> ⇈ restack</Text>
-      )}
+      ) : null}
       {branch.pr && (
         <Text color={colors.prNumber}> #{branch.pr.prNumber}</Text>
       )}

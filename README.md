@@ -56,6 +56,10 @@ A panel below the graph lists the files each branch's PR changes (its diff
 against its parent), colored by git status. It updates as you move between
 branches; press `Tab` to focus and scroll it.
 
+Branches are flagged when they're out of date with their parent: `⇈ restack`
+(yellow) when the parent has moved ahead, or `⚠ conflict` (red) when restacking
+is predicted to hit merge conflicts (detected with `git merge-tree`).
+
 The view auto-refreshes when you run `gt` in another terminal.
 
 ## How it works
@@ -68,6 +72,7 @@ Graphite's local caches directly (fast, exact):
 - **Trunk** — `.git/.graphite_repo_config`
 - **Ages / current branch** — `git for-each-ref` / `git branch --show-current`
 - **Changed files** — `git diff --name-status <parent>...<branch>`
+- **Restack conflicts** — `git merge-tree` (in-memory, predicts restack conflicts)
 
 Mutations (checkout, sync, restack, submit, delete) and opening PRs shell out to
 `gt`. All Graphite-format parsing is isolated in `src/data/` so a `gt` format

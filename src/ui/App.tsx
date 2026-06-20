@@ -7,6 +7,7 @@ import type { RepoPaths } from "../data/repo.js";
 import { loadRepoData } from "../data/load.js";
 import { githubPrUrl } from "../data/git.js";
 import { getChangedFiles } from "../data/files.js";
+import { branchConflictsWithParent } from "../data/conflicts.js";
 import { buildRenderRows } from "../model/tree.js";
 import { watchRepo } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
@@ -51,6 +52,8 @@ export function App({ initial, paths }: Props) {
   const [fileCursor, setFileCursor] = useState(0);
   const [, setCacheTick] = useState(0);
   const filesCache = useRef<Map<string, ChangedFile[]>>(new Map());
+  // Predicted restack-conflict status, keyed by branch name@revision.
+  const conflictCache = useRef<Map<string, boolean>>(new Map());
 
   const allRows = useMemo(() => buildRenderRows(data), [data]);
 
@@ -89,6 +92,7 @@ export function App({ initial, paths }: Props) {
     try {
       const { data: fresh } = loadRepoData(data.repoRoot);
       filesCache.current.clear();
+      conflictCache.current.clear();
       setData(fresh);
     } catch {
       /* transient (gt mid-write); next watch tick will retry */
@@ -108,6 +112,16 @@ export function App({ initial, paths }: Props) {
   const cachedFiles = fileKey ? filesCache.current.get(fileKey) : undefined;
   const files: ChangedFile[] = noParent ? [] : (cachedFiles ?? []);
   const filesLoading = !noParent && !!selBranch && cachedFiles === undefined;
+
+  // Branches predicted to conflict on restack (from the background check).
+  // Computed inline each render so it always reflects the latest cache state
+  // (the ref fills asynchronously and bumps cacheTick to re-render).
+  const conflictedBranches = new Set<string>();
+  for (const r of rows) {
+    if (conflictCache.current.get(`${r.branch.name}@${r.branch.revision}`)) {
+      conflictedBranches.add(r.branch.name);
+    }
+  }
 
   // Reset the file scroll position when the selected branch changes.
   useEffect(() => {
@@ -135,8 +149,9 @@ export function App({ initial, paths }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileKey]);
 
-  // Warm the cache for every branch in the background so subsequent
-  // navigation is instant. Runs once per data load (cleared on reload).
+  // Warm the caches for every branch in the background so subsequent
+  // navigation is instant. Also predicts restack conflicts for branches that
+  // need a restack. Runs once per data load (caches cleared on reload).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -144,11 +159,24 @@ export function App({ initial, paths }: Props) {
         if (cancelled) return;
         if (b.isTrunk || !b.parent) continue;
         const key = `${b.name}@${b.revision}`;
-        if (filesCache.current.has(key)) continue;
-        const result = await getChangedFiles(data.repoRoot, b.parent, b.name);
-        if (cancelled) return;
-        filesCache.current.set(key, result);
-        setCacheTick((t) => t + 1);
+        if (!filesCache.current.has(key)) {
+          const result = await getChangedFiles(data.repoRoot, b.parent, b.name);
+          if (cancelled) return;
+          filesCache.current.set(key, result);
+          setCacheTick((t) => t + 1);
+        }
+        // A branch on its parent's tip can't conflict on restack; only check
+        // branches that actually need restacking.
+        if (b.needsRestack && !conflictCache.current.has(key)) {
+          const conflicts = await branchConflictsWithParent(
+            data.repoRoot,
+            b.parent,
+            b.name
+          );
+          if (cancelled) return;
+          conflictCache.current.set(key, conflicts);
+          setCacheTick((t) => t + 1);
+        }
       }
     })();
     return () => {
@@ -356,6 +384,7 @@ export function App({ initial, paths }: Props) {
           titleWidth={titleWidth}
           scrollOffset={branchOffset}
           visible={branchVisible}
+          conflictedBranches={conflictedBranches}
         />
 
         {mode === "filter" && (

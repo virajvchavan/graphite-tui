@@ -12,6 +12,8 @@ interface Props {
   scrollOffset: number;
   /** Number of branch rows that fit. */
   visible: number;
+  /** Names of branches predicted to conflict on restack. */
+  conflictedBranches: Set<string>;
 }
 
 export function StackGraph({
@@ -21,6 +23,7 @@ export function StackGraph({
   titleWidth,
   scrollOffset,
   visible,
+  conflictedBranches,
 }: Props) {
   if (rows.length === 0) {
     return <Text color="gray">No tracked branches. Create one with `gt create`.</Text>;
@@ -42,6 +45,7 @@ export function StackGraph({
             columnCount={columnCount}
             selected={absolute === selectedIndex}
             titleWidth={titleWidth}
+            conflicted={conflictedBranches.has(row.branch.name)}
           />
         );
       })}

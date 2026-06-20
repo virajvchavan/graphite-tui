@@ -13,6 +13,7 @@ export const colors = {
   changesRequested: "red",
   reviewRequired: "yellow",
   needsRestack: "yellow",
+  conflict: "red",
   prNumber: "gray",
   age: "gray",
   dim: "gray",
