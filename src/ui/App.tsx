@@ -43,11 +43,13 @@ export function App({ initial, paths }: Props) {
   const [message, setMessage] = useState<Msg | null>(null);
   const [query, setQuery] = useState("");
 
-  // Changed-files panel state.
+  // Changed-files panel state. Files are derived from a per-branch cache
+  // (keyed by name@revision) that is warmed in the background, so navigating
+  // to an already-loaded branch is an instant single render (no loading flash
+  // and no flicker). `cacheTick` forces a re-render when the cache fills.
   const [focus, setFocus] = useState<"branches" | "files">("branches");
-  const [files, setFiles] = useState<ChangedFile[]>([]);
-  const [filesLoading, setFilesLoading] = useState(false);
   const [fileCursor, setFileCursor] = useState(0);
+  const [, setCacheTick] = useState(0);
   const filesCache = useRef<Map<string, ChangedFile[]>>(new Map());
 
   const allRows = useMemo(() => buildRenderRows(data), [data]);
@@ -101,23 +103,23 @@ export function App({ initial, paths }: Props) {
   const noParent = !selBranch || selBranch.isTrunk || !selBranch.parent;
   const fileKey = selBranch ? `${selBranch.name}@${selBranch.revision}` : "";
 
-  // Load changed files for the selected branch (debounced, cached, stale-guarded).
+  // Files for the selected branch, derived from the cache. `undefined` means
+  // not loaded yet → show a (rare, brief) loading state.
+  const cachedFiles = fileKey ? filesCache.current.get(fileKey) : undefined;
+  const files: ChangedFile[] = noParent ? [] : (cachedFiles ?? []);
+  const filesLoading = !noParent && !!selBranch && cachedFiles === undefined;
+
+  // Reset the file scroll position when the selected branch changes.
   useEffect(() => {
     setFileCursor(0);
-    if (!selBranch || noParent) {
-      setFiles([]);
-      setFilesLoading(false);
-      return;
-    }
-    const cached = filesCache.current.get(fileKey);
-    if (cached) {
-      setFiles(cached);
-      setFilesLoading(false);
-      return;
-    }
-    setFilesLoading(true);
+  }, [fileKey]);
+
+  // Fetch the selected branch's files immediately if not yet cached, so it
+  // appears as fast as possible.
+  useEffect(() => {
+    if (!selBranch || noParent || filesCache.current.has(fileKey)) return;
     let cancelled = false;
-    const timer = setTimeout(async () => {
+    (async () => {
       const result = await getChangedFiles(
         data.repoRoot,
         selBranch.parent,
@@ -125,15 +127,34 @@ export function App({ initial, paths }: Props) {
       );
       if (cancelled) return;
       filesCache.current.set(fileKey, result);
-      setFiles(result);
-      setFilesLoading(false);
-    }, 120);
+      setCacheTick((t) => t + 1);
+    })();
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileKey, data.repoRoot]);
+  }, [fileKey]);
+
+  // Warm the cache for every branch in the background so subsequent
+  // navigation is instant. Runs once per data load (cleared on reload).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const b of data.branches.values()) {
+        if (cancelled) return;
+        if (b.isTrunk || !b.parent) continue;
+        const key = `${b.name}@${b.revision}`;
+        if (filesCache.current.has(key)) continue;
+        const result = await getChangedFiles(data.repoRoot, b.parent, b.name);
+        if (cancelled) return;
+        filesCache.current.set(key, result);
+        setCacheTick((t) => t + 1);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [data]);
 
   const runAction = useCallback(
     async (label: string, fn: () => Promise<gt.ActionResult>) => {
@@ -284,7 +305,12 @@ export function App({ initial, paths }: Props) {
   // nor a tall branch list can push a frame past the screen (which would
   // strand a stale frame at the top). Both lists window+scroll to fit; the
   // header is pinned at top and the status bar at the bottom.
-  const totalRows = stdout?.rows ?? 24;
+  //
+  // We target one line LESS than the terminal height: a frame that fills the
+  // full height makes the terminal scroll on the trailing newline, which forces
+  // Ink to clear-and-redraw the whole screen every frame (visible flicker).
+  // Leaving a line of headroom keeps Ink's incremental updates flicker-free.
+  const frameRows = Math.max(8, (stdout?.rows ?? 24) - 1);
   const headerLines = 2;
   const dialogLines = mode === "normal" ? 0 : mode === "confirm-delete" ? 3 : 2;
   const statusLines = (message ? 1 : 0) + 4;
@@ -292,7 +318,7 @@ export function App({ initial, paths }: Props) {
   // Space shared by the branch list and the files panel.
   const listsBudget = Math.max(
     4,
-    totalRows - headerLines - dialogLines - statusLines
+    frameRows - headerLines - dialogLines - statusLines
   );
   // Reserve room for the files panel so the branch list can't crowd it out.
   const filesReserve = !selBranch ? 0 : noParent ? 2 : 6;
@@ -310,7 +336,7 @@ export function App({ initial, paths }: Props) {
   // Files panel gets whatever vertical space the branch list leaves.
   const visible = Math.max(
     3,
-    totalRows - headerLines - branchRendered - dialogLines - statusLines - panelChrome
+    frameRows - headerLines - branchRendered - dialogLines - statusLines - panelChrome
   );
   const maxOffset = Math.max(0, files.length - visible);
   const scrollOffset = Math.min(
@@ -319,7 +345,7 @@ export function App({ initial, paths }: Props) {
   );
 
   return (
-    <Box flexDirection="column" paddingX={1} height={totalRows} overflow="hidden">
+    <Box flexDirection="column" paddingX={1} height={frameRows} overflow="hidden">
       <Box flexDirection="column" flexShrink={0}>
         <Header repoRoot={data.repoRoot} trunk={data.trunk} busy={busy} />
 
