@@ -7,7 +7,6 @@ import type { RepoPaths } from "../data/repo.js";
 import { loadRepoData } from "../data/load.js";
 import { githubPrUrl } from "../data/git.js";
 import { getChangedFiles } from "../data/files.js";
-import { branchConflictsWithParent } from "../data/conflicts.js";
 import { buildRenderRows } from "../model/tree.js";
 import { watchRepo } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
@@ -52,8 +51,6 @@ export function App({ initial, paths }: Props) {
   const [fileCursor, setFileCursor] = useState(0);
   const [, setCacheTick] = useState(0);
   const filesCache = useRef<Map<string, ChangedFile[]>>(new Map());
-  // Predicted restack-conflict status, keyed by branch name@revision.
-  const conflictCache = useRef<Map<string, boolean>>(new Map());
 
   const allRows = useMemo(() => buildRenderRows(data), [data]);
 
@@ -92,7 +89,6 @@ export function App({ initial, paths }: Props) {
     try {
       const { data: fresh } = loadRepoData(data.repoRoot);
       filesCache.current.clear();
-      conflictCache.current.clear();
       setData(fresh);
     } catch {
       /* transient (gt mid-write); next watch tick will retry */
@@ -113,15 +109,10 @@ export function App({ initial, paths }: Props) {
   const files: ChangedFile[] = noParent ? [] : (cachedFiles ?? []);
   const filesLoading = !noParent && !!selBranch && cachedFiles === undefined;
 
-  // Branches predicted to conflict on restack (from the background check).
-  // Computed inline each render so it always reflects the latest cache state
-  // (the ref fills asynchronously and bumps cacheTick to re-render).
+  // The branch (if any) that an in-progress rebase is currently stuck on with
+  // merge conflicts — flagged red in the graph.
   const conflictedBranches = new Set<string>();
-  for (const r of rows) {
-    if (conflictCache.current.get(`${r.branch.name}@${r.branch.revision}`)) {
-      conflictedBranches.add(r.branch.name);
-    }
-  }
+  if (data.rebase?.branch) conflictedBranches.add(data.rebase.branch);
 
   // Reset the file scroll position when the selected branch changes.
   useEffect(() => {
@@ -149,9 +140,8 @@ export function App({ initial, paths }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileKey]);
 
-  // Warm the caches for every branch in the background so subsequent
-  // navigation is instant. Also predicts restack conflicts for branches that
-  // need a restack. Runs once per data load (caches cleared on reload).
+  // Warm the changed-files cache for every branch in the background so
+  // subsequent navigation is instant. Runs once per data load.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -159,24 +149,11 @@ export function App({ initial, paths }: Props) {
         if (cancelled) return;
         if (b.isTrunk || !b.parent) continue;
         const key = `${b.name}@${b.revision}`;
-        if (!filesCache.current.has(key)) {
-          const result = await getChangedFiles(data.repoRoot, b.parent, b.name);
-          if (cancelled) return;
-          filesCache.current.set(key, result);
-          setCacheTick((t) => t + 1);
-        }
-        // A branch on its parent's tip can't conflict on restack; only check
-        // branches that actually need restacking.
-        if (b.needsRestack && !conflictCache.current.has(key)) {
-          const conflicts = await branchConflictsWithParent(
-            data.repoRoot,
-            b.parent,
-            b.name
-          );
-          if (cancelled) return;
-          conflictCache.current.set(key, conflicts);
-          setCacheTick((t) => t + 1);
-        }
+        if (filesCache.current.has(key)) continue;
+        const result = await getChangedFiles(data.repoRoot, b.parent, b.name);
+        if (cancelled) return;
+        filesCache.current.set(key, result);
+        setCacheTick((t) => t + 1);
       }
     })();
     return () => {
@@ -341,7 +318,7 @@ export function App({ initial, paths }: Props) {
   const frameRows = Math.max(8, (stdout?.rows ?? 24) - 1);
   const headerLines = 2;
   const dialogLines = mode === "normal" ? 0 : mode === "confirm-delete" ? 3 : 2;
-  const statusLines = (message ? 1 : 0) + 4;
+  const statusLines = (message ? 1 : 0) + 4 + (data.rebase ? 1 : 0);
   const panelChrome = 1 /*marginTop*/ + 1 /*panel header*/ + 2 /*more rows*/;
   // Space shared by the branch list and the files panel.
   const listsBudget = Math.max(
@@ -427,7 +404,16 @@ export function App({ initial, paths }: Props) {
         )}
       </Box>
 
-      <Box flexShrink={0}>
+      <Box flexShrink={0} flexDirection="column">
+        {data.rebase && (
+          <Text color="red" bold wrap="truncate-end">
+            {`⚠ Rebase paused${
+              data.rebase.branch ? ` on ${data.rebase.branch}` : ""
+            } — ${data.rebase.files.length} conflicted file${
+              data.rebase.files.length === 1 ? "" : "s"
+            }. Resolve, then \`gt continue\` (or \`gt abort\`).`}
+          </Text>
+        )}
         <StatusBar
           currentBranch={data.currentBranch}
           message={message}

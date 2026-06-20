@@ -6,7 +6,15 @@ import type { RepoPaths } from "./repo.js";
  * any of them change, so the TUI reflects `gt` activity from other terminals.
  */
 export function watchRepo(paths: RepoPaths, onChange: () => void): () => void {
-  const targets = [paths.metadataDb, paths.prInfo, paths.repoConfig, paths.head];
+  // Watch the git dir too so a rebase starting/stopping (rebase-merge dir
+  // appearing/disappearing) refreshes the conflict indicator live.
+  const targets = [
+    paths.metadataDb,
+    paths.prInfo,
+    paths.repoConfig,
+    paths.head,
+    paths.gitDir,
+  ];
   const watchers: FSWatcher[] = [];
   let timer: NodeJS.Timeout | null = null;
 

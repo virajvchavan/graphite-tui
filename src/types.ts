@@ -67,6 +67,14 @@ export interface Branch {
   displayTitle: string;
 }
 
+/** An in-progress rebase that is paused on merge conflicts. */
+export interface RebaseState {
+  /** Branch being rebased (the one with conflicts), if known. */
+  branch: string | null;
+  /** Currently unmerged (conflicted) file paths. */
+  files: string[];
+}
+
 /** The full loaded state for a repo. */
 export interface RepoData {
   repoRoot: string;
@@ -74,6 +82,8 @@ export interface RepoData {
   /** All branches keyed by name. */
   branches: Map<string, Branch>;
   currentBranch: string | null;
+  /** Set when a sync/restack is paused on conflicts, else null. */
+  rebase: RebaseState | null;
   /** Epoch ms of the last PR-info fetch, if known. */
   lastFetchedPrInfoMs: number | null;
 }

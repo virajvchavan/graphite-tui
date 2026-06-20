@@ -1,6 +1,8 @@
 import { execaSync } from "execa";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { getConflictedFiles } from "./git.js";
+import type { RebaseState } from "../types.js";
 
 export interface RepoPaths {
   repoRoot: string;
@@ -79,4 +81,32 @@ export function readRepoConfig(paths: RepoPaths): RepoConfig {
         ? raw.lastFetchedPRInfoMs
         : null,
   };
+}
+
+/**
+ * Detect an in-progress rebase paused on merge conflicts (e.g. a `gt sync`
+ * or `gt restack` that stopped). git records this as a `rebase-merge` (or
+ * `rebase-apply`) directory under .git; `head-name` holds the branch being
+ * rebased. Returns null when no rebase is in progress.
+ */
+export function readRebaseState(paths: RepoPaths): RebaseState | null {
+  const mergeDir = join(paths.gitDir, "rebase-merge");
+  const applyDir = join(paths.gitDir, "rebase-apply");
+  const dir = existsSync(mergeDir)
+    ? mergeDir
+    : existsSync(applyDir)
+      ? applyDir
+      : null;
+  if (!dir) return null;
+
+  let branch: string | null = null;
+  try {
+    branch = readFileSync(join(dir, "head-name"), "utf8")
+      .trim()
+      .replace(/^refs\/heads\//, "");
+  } catch {
+    /* head-name may be absent in some rebase forms */
+  }
+  const files = getConflictedFiles(paths.repoRoot);
+  return { branch, files };
 }

@@ -42,6 +42,20 @@ export function getCurrentBranch(repoRoot: string): string | null {
   }
 }
 
+/** Currently unmerged (conflicted) file paths in the working tree. */
+export function getConflictedFiles(repoRoot: string): string[] {
+  try {
+    const { stdout } = execaSync(
+      "git",
+      ["diff", "--name-only", "--diff-filter=U"],
+      { cwd: repoRoot }
+    );
+    return stdout.split("\n").filter((l) => l.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
 /** Abbreviate git's relative date, e.g. "2 days ago" -> "2d", "3 hours ago" -> "3h". */
 export function abbreviateAge(relative: string): string {
   const m = relative.match(/(\d+)\s+(second|minute|hour|day|week|month|year)/);

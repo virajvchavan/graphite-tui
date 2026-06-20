@@ -2,7 +2,12 @@ import type { Branch, BranchMeta, RepoData } from "../types.js";
 import { getBranchAges, getCurrentBranch } from "./git.js";
 import { readBranchMetadata } from "./metadata.js";
 import { readPrInfo } from "./prInfo.js";
-import { readRepoConfig, resolveRepoPaths, type RepoPaths } from "./repo.js";
+import {
+  readRebaseState,
+  readRepoConfig,
+  resolveRepoPaths,
+  type RepoPaths,
+} from "./repo.js";
 
 function isTrunkRow(validationResult: string | null, name: string, trunk: string): boolean {
   return validationResult === "TRUNK" || name === trunk;
@@ -43,6 +48,7 @@ export function loadRepoData(cwd: string): { data: RepoData; paths: RepoPaths } 
   const prs = readPrInfo(paths);
   const ages = getBranchAges(paths.repoRoot);
   const currentBranch = getCurrentBranch(paths.repoRoot);
+  const rebase = readRebaseState(paths);
 
   const branches = new Map<string, Branch>();
   for (const [name, m] of meta) {
@@ -69,6 +75,7 @@ export function loadRepoData(cwd: string): { data: RepoData; paths: RepoPaths } 
       trunk: config.trunk,
       branches,
       currentBranch,
+      rebase,
       lastFetchedPrInfoMs: config.lastFetchedPrInfoMs,
     },
     paths,
