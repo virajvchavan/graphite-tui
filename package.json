@@ -1,0 +1,60 @@
+{
+  "name": "graphite-tui",
+  "version": "0.1.0",
+  "description": "Keyboard-driven TUI for Graphite PR stacks — a terminal alternative to the Graphite VSCode sidebar",
+  "type": "module",
+  "license": "MIT",
+  "author": "Viraj Chavan",
+  "homepage": "https://github.com/virajvchavan/graphite-tui#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/virajvchavan/graphite-tui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/virajvchavan/graphite-tui/issues"
+  },
+  "keywords": [
+    "graphite",
+    "tui",
+    "terminal",
+    "cli",
+    "git",
+    "github",
+    "pull-request",
+    "stacked-prs",
+    "ink"
+  ],
+  "bin": {
+    "graphite-tui": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.tsx",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "prepare": "tsc"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "clipboardy": "^4.0.0",
+    "execa": "^9.5.2",
+    "fuzzysort": "^3.1.0",
+    "ink": "^5.1.0",
+    "ink-spinner": "^5.0.0",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
