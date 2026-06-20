@@ -16,7 +16,7 @@ import { fetchPrStatus } from "../data/comments.js";
 import { buildRenderRows } from "../model/tree.js";
 import { watchRepo } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
-import { centeredOffset } from "./scroll.js";
+import { centeredOffset, keepVisibleOffset } from "./scroll.js";
 import { Header } from "./Header.js";
 import { StackGraph } from "./StackGraph.js";
 import { FilesPanel } from "./FilesPanel.js";
@@ -59,6 +59,13 @@ const FILTER_HINT: Array<[string, string]> = [
 const FILES_HINT: Array<[string, string]> = [
   ["Tab/esc", "back to branches"],
 ];
+
+/** PR numbers for every branch that has a PR. */
+function prNumbersOf(repo: RepoData): number[] {
+  const ns: number[] = [];
+  for (const b of repo.branches.values()) if (b.pr) ns.push(b.pr.prNumber);
+  return ns;
+}
 
 export function App({ initial, paths }: Props) {
   const { exit } = useApp();
@@ -206,9 +213,7 @@ export function App({ initial, paths }: Props) {
   // covered by the file watcher.
   const refreshPrStatus = useCallback(
     async (repo: RepoData = data) => {
-      const prNumbers: number[] = [];
-      for (const b of repo.branches.values())
-        if (b.pr) prNumbers.push(b.pr.prNumber);
+      const prNumbers = prNumbersOf(repo);
       if (!prNumbers.length) return;
       const status = await fetchPrStatus(repo.repoRoot, prNumbers);
       if (status.size > 0) setPrStatus(status);
@@ -218,11 +223,10 @@ export function App({ initial, paths }: Props) {
 
   // Re-fetch when the set of PR numbers changes (initial load, branch gains or
   // loses a PR).
-  const prNumberKey = useMemo(() => {
-    const ns: number[] = [];
-    for (const b of data.branches.values()) if (b.pr) ns.push(b.pr.prNumber);
-    return ns.sort((a, z) => a - z).join(",");
-  }, [data]);
+  const prNumberKey = useMemo(
+    () => prNumbersOf(data).sort((a, z) => a - z).join(","),
+    [data]
+  );
 
   useEffect(() => {
     if (!prNumberKey) return;
@@ -379,13 +383,9 @@ export function App({ initial, paths }: Props) {
     } else if (key.downArrow || input === "j") {
       setSelected((s) => Math.min(rows.length - 1, s + 1));
     } else if (key.return || input === "c") {
-      if (selectedRow && !selectedRow.branch.isTrunk) {
+      if (selectedRow) {
         const name = selectedRow.branch.name;
         runAction(`checking out ${name}`, () => gt.checkout(data.repoRoot, name));
-      } else if (selectedRow) {
-        runAction(`checking out ${selectedRow.branch.name}`, () =>
-          gt.checkout(data.repoRoot, selectedRow.branch.name)
-        );
       }
     } else if (input === "o") {
       if (selectedRow?.branch.pr)
@@ -491,11 +491,7 @@ export function App({ initial, paths }: Props) {
     3,
     frameRows - headerLines - branchRendered - dialogLines - statusLines - panelChrome
   );
-  const maxOffset = Math.max(0, files.length - visible);
-  const scrollOffset = Math.min(
-    maxOffset,
-    fileCursor < visible ? 0 : fileCursor - visible + 1
-  );
+  const scrollOffset = keepVisibleOffset(fileCursor, visible, files.length);
 
   return (
     <Box flexDirection="column" paddingX={1} height={frameRows} overflow="hidden">

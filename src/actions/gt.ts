@@ -49,6 +49,12 @@ function errorOutput(err: unknown): string {
   ).trim();
 }
 
+/** Map a thrown execa error to a failed ActionResult (summary + full detail). */
+function failure(err: unknown): ActionResult {
+  const full = errorOutput(err);
+  return { ok: false, message: summarizeError(full), detail: full || undefined };
+}
+
 async function runGt(
   repoRoot: string,
   args: string[],
@@ -58,8 +64,7 @@ async function runGt(
     await execa("gt", gtArgs(repoRoot, args), { all: true });
     return { ok: true, message: successMsg };
   } catch (err: unknown) {
-    const full = errorOutput(err);
-    return { ok: false, message: summarizeError(full), detail: full || undefined };
+    return failure(err);
   }
 }
 
@@ -91,8 +96,7 @@ export async function openUrl(url: string): Promise<ActionResult> {
     await execa(cmd, args, { timeout: 8000 });
     return { ok: true, message: "Opened in browser" };
   } catch (err: unknown) {
-    const full = errorOutput(err);
-    return { ok: false, message: summarizeError(full), detail: full || undefined };
+    return failure(err);
   }
 }
 
@@ -108,7 +112,6 @@ export async function openPr(
     await execa("gt", [...args, "--cwd", repoRoot], { timeout: 8000 });
     return { ok: true, message: stack ? "Opened stack" : "Opened PR" };
   } catch (err: unknown) {
-    const full = errorOutput(err);
-    return { ok: false, message: summarizeError(full), detail: full || undefined };
+    return failure(err);
   }
 }

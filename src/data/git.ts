@@ -29,6 +29,15 @@ export function githubPrUrl(repoRoot: string, prNumber: number): string | null {
   return base ? `${base}/pull/${prNumber}` : null;
 }
 
+/** owner/repo of the origin remote, derived from its web URL, or null. */
+export function getRemoteOwnerRepo(
+  repoRoot: string
+): { owner: string; name: string } | null {
+  const web = getRemoteWebUrl(repoRoot);
+  const m = web?.match(/^https:\/\/[^/]+\/([^/]+)\/(.+)$/);
+  return m ? { owner: m[1], name: m[2] } : null;
+}
+
 /** Current checked-out branch, or null if detached HEAD. */
 export function getCurrentBranch(repoRoot: string): string | null {
   try {
