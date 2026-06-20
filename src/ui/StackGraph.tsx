@@ -8,23 +8,46 @@ interface Props {
   columnCount: number;
   selectedIndex: number;
   titleWidth: number;
+  /** First visible branch row. */
+  scrollOffset: number;
+  /** Number of branch rows that fit. */
+  visible: number;
 }
 
-export function StackGraph({ rows, columnCount, selectedIndex, titleWidth }: Props) {
+export function StackGraph({
+  rows,
+  columnCount,
+  selectedIndex,
+  titleWidth,
+  scrollOffset,
+  visible,
+}: Props) {
   if (rows.length === 0) {
     return <Text color="gray">No tracked branches. Create one with `gt create`.</Text>;
   }
+  const window = rows.slice(scrollOffset, scrollOffset + visible);
+  const hiddenAbove = scrollOffset;
+  const hiddenBelow = Math.max(0, rows.length - (scrollOffset + visible));
   return (
     <Box flexDirection="column">
-      {rows.map((row, i) => (
-        <BranchRow
-          key={row.branch.name}
-          row={row}
-          columnCount={columnCount}
-          selected={i === selectedIndex}
-          titleWidth={titleWidth}
-        />
-      ))}
+      {hiddenAbove > 0 ? (
+        <Text color="gray">{`     ↑ ${hiddenAbove} more`}</Text>
+      ) : null}
+      {window.map((row, i) => {
+        const absolute = scrollOffset + i;
+        return (
+          <BranchRow
+            key={row.branch.name}
+            row={row}
+            columnCount={columnCount}
+            selected={absolute === selectedIndex}
+            titleWidth={titleWidth}
+          />
+        );
+      })}
+      {hiddenBelow > 0 ? (
+        <Text color="gray">{`     ↓ ${hiddenBelow} more`}</Text>
+      ) : null}
     </Box>
   );
 }

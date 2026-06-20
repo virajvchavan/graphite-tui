@@ -10,6 +10,7 @@ import { getChangedFiles } from "../data/files.js";
 import { buildRenderRows } from "../model/tree.js";
 import { watchRepo } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
+import { centeredOffset } from "./scroll.js";
 import { Header } from "./Header.js";
 import { StackGraph } from "./StackGraph.js";
 import { FilesPanel } from "./FilesPanel.js";
@@ -279,20 +280,37 @@ export function App({ initial, paths }: Props) {
     totalWidth - 2 - columnCount * 2 - 30
   );
 
-  // Constrain the whole UI to the terminal height so a tall file list can
-  // never push a frame past the screen (which strands a stale frame at the
-  // top). The top section (header + graph) is pinned; the files panel fills
-  // and clips the remaining space; the status bar is pinned at the bottom.
+  // Constrain the whole UI to the terminal height so neither a tall file list
+  // nor a tall branch list can push a frame past the screen (which would
+  // strand a stale frame at the top). Both lists window+scroll to fit; the
+  // header is pinned at top and the status bar at the bottom.
   const totalRows = stdout?.rows ?? 24;
-  // Lines used outside the files panel: header (2) + graph + dialog (≤2) +
-  // status bar (marginTop + message + wrapped hint, budget generously).
+  const headerLines = 2;
   const dialogLines = mode === "normal" ? 0 : mode === "confirm-delete" ? 3 : 2;
-  const topLines = 2 + rows.length + dialogLines;
   const statusLines = (message ? 1 : 0) + 4;
   const panelChrome = 1 /*marginTop*/ + 1 /*panel header*/ + 2 /*more rows*/;
+  // Space shared by the branch list and the files panel.
+  const listsBudget = Math.max(
+    4,
+    totalRows - headerLines - dialogLines - statusLines
+  );
+  // Reserve room for the files panel so the branch list can't crowd it out.
+  const filesReserve = !selBranch ? 0 : noParent ? 2 : 6;
+  const branchBudget = Math.max(3, listsBudget - filesReserve);
+  const branchScroll = rows.length > branchBudget;
+  // When scrolling, two rows go to the ↑/↓ indicators.
+  const branchVisible = branchScroll
+    ? Math.max(1, branchBudget - 2)
+    : rows.length;
+  const branchOffset = branchScroll
+    ? centeredOffset(selected, branchVisible, rows.length)
+    : 0;
+  const branchRendered = branchVisible + (branchScroll ? 2 : 0);
+
+  // Files panel gets whatever vertical space the branch list leaves.
   const visible = Math.max(
     3,
-    totalRows - topLines - statusLines - panelChrome
+    totalRows - headerLines - branchRendered - dialogLines - statusLines - panelChrome
   );
   const maxOffset = Math.max(0, files.length - visible);
   const scrollOffset = Math.min(
@@ -310,6 +328,8 @@ export function App({ initial, paths }: Props) {
           columnCount={columnCount}
           selectedIndex={selected}
           titleWidth={titleWidth}
+          scrollOffset={branchOffset}
+          visible={branchVisible}
         />
 
         {mode === "filter" && (
