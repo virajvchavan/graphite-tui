@@ -1,14 +1,6 @@
 import { execa } from "execa";
-import { getRemoteWebUrl } from "./git.js";
+import { getRemoteOwnerRepo } from "./git.js";
 import type { CiStatus, PrLiveStatus } from "../types.js";
-
-/** owner/repo parsed from the origin remote's web URL, or null. */
-function parseOwnerName(repoRoot: string): { owner: string; name: string } | null {
-  const web = getRemoteWebUrl(repoRoot);
-  if (!web) return null;
-  const m = web.match(/^https:\/\/[^/]+\/([^/]+)\/(.+)$/);
-  return m ? { owner: m[1], name: m[2] } : null;
-}
 
 /** Map GitHub's StatusState enum to our coarse CI status. */
 function mapCiState(state: unknown): CiStatus {
@@ -40,7 +32,7 @@ export async function fetchPrStatus(
 ): Promise<Map<number, PrLiveStatus>> {
   const result = new Map<number, PrLiveStatus>();
   if (prNumbers.length === 0) return result;
-  const repo = parseOwnerName(repoRoot);
+  const repo = getRemoteOwnerRepo(repoRoot);
   if (!repo) return result;
 
   // One aliased field per PR (alias can't start with a digit -> "p<number>").

@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import fuzzysort from "fuzzysort";
 import clipboard from "clipboardy";
@@ -16,14 +23,17 @@ import { fetchPrStatus } from "../data/comments.js";
 import { buildRenderRows } from "../model/tree.js";
 import { watchRepo } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
-import { centeredOffset } from "./scroll.js";
+import * as commandLog from "../actions/commandLog.js";
+import { centeredOffset, keepVisibleOffset } from "./scroll.js";
 import { Header } from "./Header.js";
 import { StackGraph } from "./StackGraph.js";
 import { FilesPanel } from "./FilesPanel.js";
+import { CommandLog, flattenLog } from "./CommandLog.js";
 import { StatusBar } from "./StatusBar.js";
 import { HelpOverlay } from "./HelpOverlay.js";
 import { ErrorOverlay } from "./ErrorOverlay.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
+import { colors } from "./theme.js";
 
 type Mode = "normal" | "filter" | "help" | "confirm-delete" | "copy" | "error";
 
@@ -57,8 +67,24 @@ const FILTER_HINT: Array<[string, string]> = [
   ["↵", "keep filter"],
 ];
 const FILES_HINT: Array<[string, string]> = [
-  ["Tab/esc", "back to branches"],
+  ["Tab", "logs"],
+  ["esc", "branches"],
 ];
+const LOG_HINT: Array<[string, string]> = [
+  ["↵", "collapse"],
+  ["↑/↓", "move"],
+  ["c", "clear"],
+  ["Tab/esc", "back"],
+];
+// Number of log lines the command-log panel shows ("not too tall").
+const LOG_VISIBLE = 6;
+
+/** PR numbers for every branch that has a PR. */
+function prNumbersOf(repo: RepoData): number[] {
+  const ns: number[] = [];
+  for (const b of repo.branches.values()) if (b.pr) ns.push(b.pr.prNumber);
+  return ns;
+}
 
 export function App({ initial, paths }: Props) {
   const { exit } = useApp();
@@ -77,10 +103,37 @@ export function App({ initial, paths }: Props) {
   // (keyed by name@revision) that is warmed in the background, so navigating
   // to an already-loaded branch is an instant single render (no loading flash
   // and no flicker). `cacheTick` forces a re-render when the cache fills.
-  const [focus, setFocus] = useState<"branches" | "files">("branches");
+  const [focus, setFocus] = useState<"branches" | "files" | "logs">("branches");
   const [fileCursor, setFileCursor] = useState(0);
   const [, setCacheTick] = useState(0);
   const filesCache = useRef<Map<string, ChangedFile[]>>(new Map());
+
+  // Session command log (commands run on the user's behalf). Subscribed as an
+  // external store; the panel appears only once there's at least one entry.
+  // When unfocused it tails the newest output; when focused, `logCursor` is a
+  // line cursor the user moves with j/k, and Enter toggles the collapsed state
+  // of the command under it. Commands are collapsed by default (just a spinner
+  // while running); a failed command auto-expands so its error is visible.
+  // `logOverrides` records per-entry manual choices (true=collapsed) that win
+  // over that default.
+  const logEntries = useSyncExternalStore(
+    commandLog.subscribe,
+    commandLog.getSnapshot
+  );
+  const [logCursor, setLogCursor] = useState(0);
+  const [logOverrides, setLogOverrides] = useState<ReadonlyMap<number, boolean>>(
+    new Map()
+  );
+  // Stateful first-visible-line offset. Unlike a derived offset it doesn't snap
+  // back: it only moves when the cursor leaves the window, or when expanding a
+  // command pins its header to the top.
+  const [logScroll, setLogScroll] = useState(0);
+  const showLog = logEntries.length > 0;
+  // The flattened log lines + effective collapsed set for the current view,
+  // mirrored into refs so the key handler can read line count, the entry under
+  // the cursor, and its collapsed state without computing them before useInput.
+  const logLinesRef = useRef<import("./CommandLog.js").Line[]>([]);
+  const collapsedIdsRef = useRef<Set<number>>(new Set());
 
   // Live per-PR status (comment thread counts + CI state) keyed by PR number,
   // fetched best-effort from GitHub (Graphite doesn't cache it). Empty until the
@@ -206,9 +259,7 @@ export function App({ initial, paths }: Props) {
   // covered by the file watcher.
   const refreshPrStatus = useCallback(
     async (repo: RepoData = data) => {
-      const prNumbers: number[] = [];
-      for (const b of repo.branches.values())
-        if (b.pr) prNumbers.push(b.pr.prNumber);
+      const prNumbers = prNumbersOf(repo);
       if (!prNumbers.length) return;
       const status = await fetchPrStatus(repo.repoRoot, prNumbers);
       if (status.size > 0) setPrStatus(status);
@@ -218,11 +269,10 @@ export function App({ initial, paths }: Props) {
 
   // Re-fetch when the set of PR numbers changes (initial load, branch gains or
   // loses a PR).
-  const prNumberKey = useMemo(() => {
-    const ns: number[] = [];
-    for (const b of data.branches.values()) if (b.pr) ns.push(b.pr.prNumber);
-    return ns.sort((a, z) => a - z).join(",");
-  }, [data]);
+  const prNumberKey = useMemo(
+    () => prNumbersOf(data).sort((a, z) => a - z).join(","),
+    [data]
+  );
 
   useEffect(() => {
     if (!prNumberKey) return;
@@ -273,6 +323,14 @@ export function App({ initial, paths }: Props) {
   const notify = useCallback((text: string, ok: boolean) => {
     setMessage({ text, ok });
     setErrorDetail(null);
+  }, []);
+
+  // Focus the command-log panel, placing the cursor on the newest line.
+  const focusLogs = useCallback(() => {
+    const len = logLinesRef.current.length;
+    setLogCursor(Math.max(0, len - 1));
+    setLogScroll(Math.max(0, len - LOG_VISIBLE));
+    setFocus("logs");
   }, []);
 
   // --- key handling ---
@@ -355,14 +413,69 @@ export function App({ initial, paths }: Props) {
 
     // files-panel focus: scroll the file list
     if (focus === "files") {
-      if (key.tab || key.escape) {
+      if (key.escape) {
         setFocus("branches");
+      } else if (key.tab) {
+        if (showLog) focusLogs();
+        else setFocus("branches");
       } else if (input === "q" || (key.ctrl && input === "c")) {
         exit();
       } else if (key.upArrow || input === "k") {
         setFileCursor((c) => Math.max(0, c - 1));
       } else if (key.downArrow || input === "j") {
         setFileCursor((c) => Math.min(files.length - 1, c + 1));
+      }
+      return;
+    }
+
+    // command-log focus: move the line cursor; Enter collapses/expands the
+    // command under it.
+    if (focus === "logs") {
+      if (key.tab || key.escape) {
+        setFocus("branches");
+      } else if (input === "q" || (key.ctrl && input === "c")) {
+        exit();
+      } else if (input === "c") {
+        commandLog.clear();
+        setLogOverrides(new Map());
+        setLogCursor(0);
+        setLogScroll(0);
+        setFocus("branches");
+        notify("Cleared command log", true);
+      } else if (key.return) {
+        // Toggle the command the cursor line belongs to (header or output),
+        // then land the cursor on that command's header.
+        const lines = logLinesRef.current;
+        const line = lines[logCursor];
+        if (line) {
+          const id = line.entryId;
+          const headerIdx = lines.findIndex(
+            (l) => l.entryId === id && l.kind !== "output"
+          );
+          const nowCollapsed = !collapsedIdsRef.current.has(id);
+          setLogOverrides((prev) => new Map(prev).set(id, nowCollapsed));
+          if (headerIdx >= 0) {
+            setLogCursor(headerIdx);
+            // Expanding: pin the header to the top so its output shows below.
+            // Collapsing: just keep the header from scrolling above the window.
+            if (!nowCollapsed) setLogScroll(headerIdx);
+            else setLogScroll((s) => Math.min(s, headerIdx));
+          }
+        }
+      } else if (key.upArrow || input === "k") {
+        setLogCursor((c) => {
+          const next = Math.max(0, c - 1);
+          // Scroll up only if the cursor moved above the window's top.
+          setLogScroll((s) => Math.min(s, next));
+          return next;
+        });
+      } else if (key.downArrow || input === "j") {
+        setLogCursor((c) => {
+          const next = Math.min(logLinesRef.current.length - 1, c + 1);
+          // Scroll down only if the cursor moved below the window's bottom.
+          setLogScroll((s) => Math.max(s, next - LOG_VISIBLE + 1));
+          return next;
+        });
       }
       return;
     }
@@ -374,18 +487,15 @@ export function App({ initial, paths }: Props) {
     }
     if (key.tab) {
       if (files.length) setFocus("files");
+      else if (showLog) focusLogs();
     } else if (key.upArrow || input === "k") {
       setSelected((s) => Math.max(0, s - 1));
     } else if (key.downArrow || input === "j") {
       setSelected((s) => Math.min(rows.length - 1, s + 1));
     } else if (key.return || input === "c") {
-      if (selectedRow && !selectedRow.branch.isTrunk) {
+      if (selectedRow) {
         const name = selectedRow.branch.name;
         runAction(`checking out ${name}`, () => gt.checkout(data.repoRoot, name));
-      } else if (selectedRow) {
-        runAction(`checking out ${selectedRow.branch.name}`, () =>
-          gt.checkout(data.repoRoot, selectedRow.branch.name)
-        );
       }
     } else if (input === "o") {
       if (selectedRow?.branch.pr)
@@ -468,13 +578,26 @@ export function App({ initial, paths }: Props) {
   const dialogLines = mode === "normal" ? 0 : mode === "confirm-delete" ? 3 : 2;
   const statusLines = (message ? 1 : 0) + 4 + (data.rebase ? 1 : 0);
   const panelChrome = 1 /*marginTop*/ + 1 /*panel header*/ + 2 /*more rows*/;
-  // Space shared by the branch list and the files panel.
+  // Command-log panel: a short, fixed-height section below the files panel that
+  // only takes space once at least one command has run. `logVisible` is the
+  // number of log lines shown; +2 for its marginTop and header row.
+  const logVisible = LOG_VISIBLE;
+  const logRendered = showLog ? logVisible + 2 : 0;
+  // Space shared by the branch list and the files panel (the log panel, when
+  // present, is reserved out of the total up front).
   const listsBudget = Math.max(
     4,
-    frameRows - headerLines - dialogLines - statusLines
+    frameRows - headerLines - dialogLines - statusLines - logRendered
   );
-  // Reserve room for the files panel so the branch list can't crowd it out.
-  const filesReserve = !selBranch ? 0 : noParent ? 2 : 6;
+  // Reserve room for the files panel so the branch list can't crowd it out —
+  // but only while the branch list still fits the shared budget with that
+  // reserve in place. On a short screen with many PRs the list would overflow,
+  // and there we prioritise showing PRs: drop to a minimal reserve so more PR
+  // rows fit. The files panel keeps a small minimum and can be focused+scrolled.
+  const desiredFilesReserve = !selBranch ? 0 : noParent ? 2 : 6;
+  const minFilesReserve = !selBranch ? 0 : noParent ? 2 : 3;
+  const branchesFit = rows.length <= listsBudget - desiredFilesReserve;
+  const filesReserve = branchesFit ? desiredFilesReserve : minFilesReserve;
   const branchBudget = Math.max(3, listsBudget - filesReserve);
   const branchScroll = rows.length > branchBudget;
   // When scrolling, two rows go to the ↑/↓ indicators.
@@ -486,21 +609,59 @@ export function App({ initial, paths }: Props) {
     : 0;
   const branchRendered = branchVisible + (branchScroll ? 2 : 0);
 
-  // Files panel gets whatever vertical space the branch list leaves.
+  // Files panel gets whatever vertical space the branch list (and the log
+  // panel, if shown) leave.
   const visible = Math.max(
     3,
-    frameRows - headerLines - branchRendered - dialogLines - statusLines - panelChrome
+    frameRows -
+      headerLines -
+      branchRendered -
+      dialogLines -
+      statusLines -
+      panelChrome -
+      logRendered
   );
-  const maxOffset = Math.max(0, files.length - visible);
-  const scrollOffset = Math.min(
-    maxOffset,
-    fileCursor < visible ? 0 : fileCursor - visible + 1
+  const scrollOffset = keepVisibleOffset(fileCursor, visible, files.length);
+
+  // Command-log view: when unfocused it tails the newest output; when focused
+  // the line cursor drives scrolling (reusing keepVisibleOffset).
+  // Effective collapsed state per entry: a manual override if the user set one,
+  // else the default — collapsed for running/succeeded commands, expanded for
+  // failed ones so the error is visible without interaction.
+  const collapsedIds = new Set<number>();
+  for (const e of logEntries) {
+    const def = e.status !== "error";
+    const eff = logOverrides.has(e.id) ? logOverrides.get(e.id)! : def;
+    if (eff) collapsedIds.add(e.id);
+  }
+  collapsedIdsRef.current = collapsedIds;
+  const logLines = flattenLog(logEntries, collapsedIds);
+  logLinesRef.current = logLines;
+  const logFocused = focus === "logs";
+  const logCursorClamped = Math.min(
+    Math.max(0, logCursor),
+    Math.max(0, logLines.length - 1)
   );
+  const logMaxOffset = Math.max(0, logLines.length - logVisible);
+  // Unfocused: tail the newest output. Focused: honor the stateful scroll
+  // offset (clamped), so the view never snaps back as the user navigates.
+  const logOffset = !logFocused
+    ? logMaxOffset
+    : Math.min(Math.max(0, logScroll), logMaxOffset);
 
   return (
     <Box flexDirection="column" paddingX={1} height={frameRows} overflow="hidden">
       <Box flexDirection="column" flexShrink={0}>
         <Header repoRoot={data.repoRoot} busy={busy} width={contentWidth} />
+
+        <Box>
+          <Text color={focus === "branches" ? colors.current : "gray"}>
+            {focus === "branches" ? "▾" : "▸"}{" "}
+          </Text>
+          <Text bold color={focus === "branches" ? colors.current : undefined}>
+            pull requests
+          </Text>
+        </Box>
 
         <StackGraph
           rows={rows}
@@ -555,6 +716,17 @@ export function App({ initial, paths }: Props) {
       </Box>
 
       <Box flexShrink={0} flexDirection="column">
+        {showLog && (
+          <CommandLog
+            lines={logLines}
+            entryCount={logEntries.length}
+            focused={logFocused}
+            cursor={logFocused ? logCursorClamped : null}
+            scrollOffset={logOffset}
+            visible={logVisible}
+            width={contentWidth}
+          />
+        )}
         {data.rebase && (
           <Text color="red" bold wrap="truncate-end">
             {`⚠ Rebase paused${
@@ -569,11 +741,15 @@ export function App({ initial, paths }: Props) {
           hint={
             mode === "filter"
               ? FILTER_HINT
-              : focus === "files"
-                ? FILES_HINT
-                : errorDetail
-                  ? [["e", "error details"], ...NORMAL_HINT]
-                  : NORMAL_HINT
+              : focus === "logs"
+                ? LOG_HINT
+                : focus === "files"
+                  ? showLog
+                    ? FILES_HINT
+                    : [["Tab/esc", "back to branches"]]
+                  : errorDetail
+                    ? [["e", "error details"], ...NORMAL_HINT]
+                    : NORMAL_HINT
           }
         />
       </Box>

@@ -15,11 +15,12 @@ import type { Branch, RenderRow, RepoData } from "../types.js";
 export function buildRenderRows(data: RepoData): RenderRow[] {
   const { branches, trunk, currentBranch } = data;
 
-  // Memoized subtree metrics, used to order siblings so the most relevant
-  // stack (the one holding the current branch, then the largest) takes the
-  // primary column 0.
+  // Memoized subtree metrics, used to order siblings so the largest stack
+  // takes the primary column 0. Ordering is purely structural (subtree size,
+  // then branch name) so it is stable across checkouts — it only shifts when
+  // the tree itself changes (sync/delete/restack). The current branch is
+  // highlighted via `isCurrent` below without affecting column order.
   const sizeCache = new Map<string, number>();
-  const hasCurrentCache = new Map<string, boolean>();
 
   const rawChildren = (b: Branch): Branch[] =>
     b.children
@@ -34,23 +35,14 @@ export function buildRenderRows(data: RepoData): RenderRow[] {
     sizeCache.set(b.name, n);
     return n;
   };
-  const subtreeHasCurrent = (b: Branch): boolean => {
-    const cached = hasCurrentCache.get(b.name);
-    if (cached !== undefined) return cached;
-    let found = b.name === currentBranch;
-    if (!found) found = rawChildren(b).some((c) => subtreeHasCurrent(c));
-    hasCurrentCache.set(b.name, found);
-    return found;
-  };
 
   // Children ordered so the first child continues the primary column: the
-  // subtree containing the current branch wins, then the larger subtree.
+  // larger subtree wins, with branch name as a stable tie-break.
   const childrenOf = (b: Branch): Branch[] =>
     rawChildren(b).sort((a, c) => {
-      const ac = subtreeHasCurrent(a) ? 1 : 0;
-      const cc = subtreeHasCurrent(c) ? 1 : 0;
-      if (ac !== cc) return cc - ac;
-      return subtreeSize(c) - subtreeSize(a);
+      const sizeDiff = subtreeSize(c) - subtreeSize(a);
+      if (sizeDiff !== 0) return sizeDiff;
+      return a.name.localeCompare(c.name);
     });
 
   let nextColumn = 1; // column 0 is reserved for the trunk's primary chain

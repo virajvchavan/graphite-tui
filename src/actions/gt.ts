@@ -1,4 +1,5 @@
-import { execa } from "execa";
+import { execa, type Options } from "execa";
+import * as commandLog from "./commandLog.js";
 
 export interface ActionResult {
   ok: boolean;
@@ -49,17 +50,54 @@ function errorOutput(err: unknown): string {
   ).trim();
 }
 
+/** Map a thrown execa error to a failed ActionResult (summary + full detail). */
+function failure(err: unknown): ActionResult {
+  const full = errorOutput(err);
+  return { ok: false, message: summarizeError(full), detail: full || undefined };
+}
+
+/**
+ * Run a command, recording it in the session command log: a `running` entry is
+ * opened, combined stdout+stderr is streamed into it live, and it's marked
+ * ok/error on completion. Re-throws on failure so callers map it to an
+ * ActionResult exactly as before.
+ */
+async function execLogged(
+  display: string,
+  file: string,
+  args: string[],
+  opts: Options
+) {
+  const id = commandLog.start(display);
+  try {
+    const sub = execa(file, args, { ...opts, all: true });
+    sub.all?.on("data", (c: Buffer | string) =>
+      commandLog.append(id, c.toString())
+    );
+    const res = await sub;
+    commandLog.finish(id, "ok");
+    return res;
+  } catch (err: unknown) {
+    // The stream usually captured everything already; only fall back to the
+    // error's buffered output if nothing was streamed, to avoid duplication.
+    if (!commandLog.hasOutput(id)) commandLog.append(id, errorOutput(err));
+    commandLog.finish(id, "error");
+    throw err;
+  }
+}
+
 async function runGt(
   repoRoot: string,
   args: string[],
   successMsg: string
 ): Promise<ActionResult> {
   try {
-    await execa("gt", gtArgs(repoRoot, args), { all: true });
+    await execLogged(`gt ${args.join(" ")}`, "gt", gtArgs(repoRoot, args), {
+      all: true,
+    });
     return { ok: true, message: successMsg };
   } catch (err: unknown) {
-    const full = errorOutput(err);
-    return { ok: false, message: summarizeError(full), detail: full || undefined };
+    return failure(err);
   }
 }
 
@@ -88,11 +126,10 @@ export async function openUrl(url: string): Promise<ActionResult> {
         : "xdg-open";
   const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
   try {
-    await execa(cmd, args, { timeout: 8000 });
+    await execLogged(`${cmd} ${url}`, cmd, args, { timeout: 8000 });
     return { ok: true, message: "Opened in browser" };
   } catch (err: unknown) {
-    const full = errorOutput(err);
-    return { ok: false, message: summarizeError(full), detail: full || undefined };
+    return failure(err);
   }
 }
 
@@ -105,10 +142,14 @@ export async function openPr(
   try {
     const args = stack ? ["pr", branch, "--stack"] : ["pr", branch];
     // gt pr opens a browser; keep it detached and don't wait on interactivity.
-    await execa("gt", [...args, "--cwd", repoRoot], { timeout: 8000 });
+    await execLogged(
+      `gt ${args.join(" ")}`,
+      "gt",
+      [...args, "--cwd", repoRoot],
+      { timeout: 8000 }
+    );
     return { ok: true, message: stack ? "Opened stack" : "Opened PR" };
   } catch (err: unknown) {
-    const full = errorOutput(err);
-    return { ok: false, message: summarizeError(full), detail: full || undefined };
+    return failure(err);
   }
 }
