@@ -1,5 +1,10 @@
 import type { Branch, BranchMeta, RepoData } from "../types.js";
-import { getBranchAges, getCurrentBranch } from "./git.js";
+import {
+  getBranchAges,
+  getBranchTracking,
+  getCurrentBranch,
+  getRemoteWebUrl,
+} from "./git.js";
 import { readBranchMetadata } from "./metadata.js";
 import { readPrInfo } from "./prInfo.js";
 import {
@@ -47,6 +52,8 @@ export function loadRepoData(cwd: string): { data: RepoData; paths: RepoPaths } 
   const meta = readBranchMetadata(paths);
   const prs = readPrInfo(paths);
   const ages = getBranchAges(paths.repoRoot);
+  const tracking = getBranchTracking(paths.repoRoot);
+  const hasRemote = getRemoteWebUrl(paths.repoRoot) != null;
   const currentBranch = getCurrentBranch(paths.repoRoot);
   const rebase = readRebaseState(paths);
 
@@ -55,6 +62,7 @@ export function loadRepoData(cwd: string): { data: RepoData; paths: RepoPaths } 
     const trunk = isTrunkRow(m.validationResult, name, config.trunk);
     const pr = prs.get(name) ?? null;
     const needsRestack = computeNeedsRestack(m, trunk, meta);
+    const t = tracking.get(name);
     branches.set(name, {
       name,
       parent: m.parentBranchName,
@@ -64,6 +72,10 @@ export function loadRepoData(cwd: string): { data: RepoData; paths: RepoPaths } 
       needsRestack,
       state: m.state,
       age: ages.get(name) ?? "",
+      ahead: t?.ahead ?? 0,
+      behind: t?.behind ?? 0,
+      upstreamGone: t?.gone ?? false,
+      unpushed: hasRemote && !trunk && t != null && !t.hasUpstream,
       pr,
       displayTitle: pr?.title ?? name,
     });

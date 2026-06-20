@@ -13,6 +13,7 @@ const KEYS: [string, string][] = [
   ["d", "delete branch (confirm)"],
   ["/", "fuzzy filter"],
   ["y", "copy PR url / branch name"],
+  ["e", "view last command's full error output"],
   ["R", "refresh"],
   ["? ", "toggle this help"],
   ["q", "quit"],

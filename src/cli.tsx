@@ -68,10 +68,31 @@ async function main() {
   const { render } = await import("ink");
   const React = await import("react");
   const { App } = await import("./ui/App.js");
+
+  // Switch to the terminal's alternate screen buffer so the app feels like a
+  // full-screen application (vim/less/claude-code style): no scrollback, the
+  // user can't scroll away to previous terminal output, only exit the app. On
+  // exit we restore the original screen and its history.
+  const isTTY = process.stdout.isTTY;
+  let restored = false;
+  const leaveAltScreen = () => {
+    if (restored) return;
+    restored = true;
+    if (isTTY) process.stdout.write("\x1b[?1049l");
+  };
+
+  if (isTTY) process.stdout.write("\x1b[?1049h\x1b[H");
+  // Restore the main screen no matter how the process ends.
+  process.on("exit", leaveAltScreen);
+
   const app = render(
     React.createElement(App, { initial: loaded.data, paths: loaded.paths })
   );
-  await app.waitUntilExit();
+  try {
+    await app.waitUntilExit();
+  } finally {
+    leaveAltScreen();
+  }
 }
 
 main().catch((err) => {

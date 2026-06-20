@@ -69,6 +69,70 @@ export function abbreviateAge(relative: string): string {
   return `${n}${unit}`;
 }
 
+/** Ahead/behind state of a local branch relative to its upstream tracking ref. */
+export interface BranchTracking {
+  /** False when the branch has no upstream configured (never pushed). */
+  hasUpstream: boolean;
+  /** Local commits not on the upstream (unpushed). */
+  ahead: number;
+  /** Upstream commits not local (unpulled). */
+  behind: number;
+  /** Upstream ref is configured but no longer exists on the remote. */
+  gone: boolean;
+}
+
+/**
+ * Parse git's `%(upstream:track)` field, e.g. "[ahead 2]", "[behind 1]",
+ * "[ahead 2, behind 1]", "[gone]", or "" (in sync). Returns null for branches
+ * with no upstream configured (track empty AND no upstream — see caller).
+ */
+export function parseUpstreamTrack(
+  track: string
+): Omit<BranchTracking, "hasUpstream"> {
+  if (track.includes("gone")) return { ahead: 0, behind: 0, gone: true };
+  const ahead = track.match(/ahead (\d+)/);
+  const behind = track.match(/behind (\d+)/);
+  return {
+    ahead: ahead ? Number(ahead[1]) : 0,
+    behind: behind ? Number(behind[1]) : 0,
+    gone: false,
+  };
+}
+
+/**
+ * Map branch name -> ahead/behind state vs its upstream tracking branch.
+ * Every local branch is included; branches with no upstream configured get
+ * `hasUpstream: false` (they've never been pushed).
+ */
+export function getBranchTracking(repoRoot: string): Map<string, BranchTracking> {
+  const tracking = new Map<string, BranchTracking>();
+  try {
+    const { stdout } = execaSync(
+      "git",
+      [
+        "for-each-ref",
+        "--format=%(refname:short)\t%(upstream)\t%(upstream:track)",
+        "refs/heads",
+      ],
+      { cwd: repoRoot }
+    );
+    for (const line of stdout.split("\n")) {
+      if (!line.trim()) continue;
+      const [name, upstream, track = ""] = line.split("\t");
+      if (!name) continue;
+      // No upstream configured -> never pushed; nothing to compare against.
+      if (!upstream) {
+        tracking.set(name, { hasUpstream: false, ahead: 0, behind: 0, gone: false });
+        continue;
+      }
+      tracking.set(name, { hasUpstream: true, ...parseUpstreamTrack(track) });
+    }
+  } catch {
+    /* ignore — tracking info is non-essential */
+  }
+  return tracking;
+}
+
 /**
  * Map branch name -> abbreviated relative age of its tip commit.
  * One `for-each-ref` call covers every local branch.

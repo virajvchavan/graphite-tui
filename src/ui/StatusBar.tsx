@@ -2,12 +2,12 @@ import React from "react";
 import { Box, Text } from "ink";
 
 interface Props {
-  currentBranch: string | null;
   message: { text: string; ok: boolean } | null;
-  hint: string;
+  /** Keyboard hints as [key, label] pairs. */
+  hint: Array<[string, string]>;
 }
 
-export function StatusBar({ currentBranch, message, hint }: Props) {
+export function StatusBar({ message, hint }: Props) {
   return (
     <Box marginTop={1} flexDirection="column">
       {message && (
@@ -16,12 +16,17 @@ export function StatusBar({ currentBranch, message, hint }: Props) {
           {message.text}
         </Text>
       )}
-      <Box justifyContent="space-between">
-        <Text color="gray" wrap="truncate-end">
-          on <Text color="cyan">{currentBranch ?? "(detached)"}</Text>
-        </Text>
-        <Text color="gray">{hint}</Text>
-      </Box>
+      <Text wrap="truncate-end">
+        {hint.map(([key, label], i) => (
+          <Text key={key}>
+            {i > 0 && <Text color="gray">{" · "}</Text>}
+            <Text color="white" bold>
+              {key}
+            </Text>
+            <Text color="gray">{" " + label}</Text>
+          </Text>
+        ))}
+      </Text>
     </Box>
   );
 }

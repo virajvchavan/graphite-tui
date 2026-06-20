@@ -5,16 +5,17 @@ import { basename } from "node:path";
 
 interface Props {
   repoRoot: string;
-  trunk: string;
   busy: string | null;
+  /** Match the content panels' width so the right-side hint aligns with their
+   * right edge instead of the terminal edge. */
+  width: number;
 }
 
-export function Header({ repoRoot, trunk, busy }: Props) {
+export function Header({ repoRoot, busy, width }: Props) {
   return (
-    <Box justifyContent="space-between" marginBottom={1}>
+    <Box justifyContent="space-between" marginBottom={1} width={width}>
       <Box>
-        <Text bold>GRAPHITE: BRANCHES</Text>
-        <Text color="gray">  {basename(repoRoot)} · {trunk}</Text>
+        <Text bold>Graphite: {basename(repoRoot)}</Text>
       </Box>
       <Box>
         {busy ? (
@@ -22,7 +23,12 @@ export function Header({ repoRoot, trunk, busy }: Props) {
             <Spinner type="dots" /> {busy}
           </Text>
         ) : (
-          <Text color="gray">press ? for help</Text>
+          <Text wrap="truncate-end">
+            <Text color="white" bold>
+              R
+            </Text>
+            <Text color="gray">{" to refresh"}</Text>
+          </Text>
         )}
       </Box>
     </Box>

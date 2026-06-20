@@ -2,12 +2,51 @@ import { execa } from "execa";
 
 export interface ActionResult {
   ok: boolean;
+  /** Concise one-line summary, shown in the status bar. */
   message: string;
+  /** Full combined stdout+stderr of a failed command, for the details view. */
+  detail?: string;
 }
 
 /** Common options for every gt invocation: pin the repo, run non-interactively. */
 function gtArgs(repoRoot: string, args: string[]): string[] {
   return [...args, "--cwd", repoRoot, "--no-interactive"];
+}
+
+/**
+ * Pick the most useful single line from a command's full output for the status
+ * bar. gt often buries the actionable line (a CONFLICT, error, or "aborting"
+ * notice) in the middle and ends with a generic line, so prefer those; fall
+ * back to the last non-empty line.
+ */
+export function summarizeError(full: string): string {
+  const lines = full
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return "command failed";
+  const actionable = lines.find((l) =>
+    /conflict|\berror\b|\bfatal\b|abort|cannot|failed|not /i.test(l)
+  );
+  return actionable ?? lines[lines.length - 1];
+}
+
+/** Pull the full combined output (or best available text) off an execa error. */
+function errorOutput(err: unknown): string {
+  const e = err as {
+    all?: string;
+    stderr?: string;
+    stdout?: string;
+    shortMessage?: string;
+    message?: string;
+  };
+  return (
+    e.all ||
+    [e.stdout, e.stderr].filter(Boolean).join("\n") ||
+    e.shortMessage ||
+    e.message ||
+    "command failed"
+  ).trim();
 }
 
 async function runGt(
@@ -19,12 +58,8 @@ async function runGt(
     await execa("gt", gtArgs(repoRoot, args), { all: true });
     return { ok: true, message: successMsg };
   } catch (err: unknown) {
-    const e = err as { all?: string; shortMessage?: string; message?: string };
-    const detail = (e.all || e.shortMessage || e.message || "failed")
-      .split("\n")
-      .filter(Boolean)
-      .slice(-1)[0];
-    return { ok: false, message: detail ?? "command failed" };
+    const full = errorOutput(err);
+    return { ok: false, message: summarizeError(full), detail: full || undefined };
   }
 }
 
@@ -56,8 +91,8 @@ export async function openUrl(url: string): Promise<ActionResult> {
     await execa(cmd, args, { timeout: 8000 });
     return { ok: true, message: "Opened in browser" };
   } catch (err: unknown) {
-    const e = err as { shortMessage?: string; message?: string };
-    return { ok: false, message: e.shortMessage || e.message || "could not open url" };
+    const full = errorOutput(err);
+    return { ok: false, message: summarizeError(full), detail: full || undefined };
   }
 }
 
@@ -73,7 +108,7 @@ export async function openPr(
     await execa("gt", [...args, "--cwd", repoRoot], { timeout: 8000 });
     return { ok: true, message: stack ? "Opened stack" : "Opened PR" };
   } catch (err: unknown) {
-    const e = err as { shortMessage?: string; message?: string };
-    return { ok: false, message: e.shortMessage || e.message || "could not open PR" };
+    const full = errorOutput(err);
+    return { ok: false, message: summarizeError(full), detail: full || undefined };
   }
 }

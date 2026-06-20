@@ -2,11 +2,17 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import fuzzysort from "fuzzysort";
 import clipboard from "clipboardy";
-import type { ChangedFile, RenderRow, RepoData } from "../types.js";
+import type {
+  ChangedFile,
+  PrLiveStatus,
+  RenderRow,
+  RepoData,
+} from "../types.js";
 import type { RepoPaths } from "../data/repo.js";
 import { loadRepoData } from "../data/load.js";
 import { githubPrUrl } from "../data/git.js";
 import { getChangedFiles } from "../data/files.js";
+import { fetchPrStatus } from "../data/comments.js";
 import { buildRenderRows } from "../model/tree.js";
 import { watchRepo } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
@@ -16,9 +22,10 @@ import { StackGraph } from "./StackGraph.js";
 import { FilesPanel } from "./FilesPanel.js";
 import { StatusBar } from "./StatusBar.js";
 import { HelpOverlay } from "./HelpOverlay.js";
+import { ErrorOverlay } from "./ErrorOverlay.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
 
-type Mode = "normal" | "filter" | "help" | "confirm-delete" | "copy";
+type Mode = "normal" | "filter" | "help" | "confirm-delete" | "copy" | "error";
 
 interface Props {
   initial: RepoData;
@@ -30,8 +37,28 @@ interface Msg {
   ok: boolean;
 }
 
-const NORMAL_HINT =
-  "↵ checkout · o Graphite · g GitHub · s sync · r restack · S submit · d delete · Tab files · / filter · y copy · ? help · q quit";
+// Keyboard hints as [key, label] pairs so the StatusBar can style the key
+// distinctly from its description.
+const NORMAL_HINT: Array<[string, string]> = [
+  ["↵", "checkout"],
+  ["o", "Graphite"],
+  ["g", "GitHub"],
+  ["s", "sync"],
+  ["r", "restack"],
+  ["S", "submit"],
+  ["d", "delete"],
+  ["Tab", "files"],
+  ["/", "filter"],
+  ["y", "copy"],
+  ["?", "help"],
+];
+const FILTER_HINT: Array<[string, string]> = [
+  ["esc", "clear"],
+  ["↵", "keep filter"],
+];
+const FILES_HINT: Array<[string, string]> = [
+  ["Tab/esc", "back to branches"],
+];
 
 export function App({ initial, paths }: Props) {
   const { exit } = useApp();
@@ -41,6 +68,9 @@ export function App({ initial, paths }: Props) {
   const [selected, setSelected] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<Msg | null>(null);
+  // Full output of the last failed command, viewable via the error overlay.
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [errorScroll, setErrorScroll] = useState(0);
   const [query, setQuery] = useState("");
 
   // Changed-files panel state. Files are derived from a per-branch cache
@@ -51,6 +81,13 @@ export function App({ initial, paths }: Props) {
   const [fileCursor, setFileCursor] = useState(0);
   const [, setCacheTick] = useState(0);
   const filesCache = useRef<Map<string, ChangedFile[]>>(new Map());
+
+  // Live per-PR status (comment thread counts + CI state) keyed by PR number,
+  // fetched best-effort from GitHub (Graphite doesn't cache it). Empty until the
+  // fetch resolves.
+  const [prStatus, setPrStatus] = useState<Map<number, PrLiveStatus>>(
+    new Map()
+  );
 
   const allRows = useMemo(() => buildRenderRows(data), [data]);
 
@@ -85,13 +122,15 @@ export function App({ initial, paths }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const reload = useCallback(() => {
+  const reload = useCallback((): RepoData | null => {
     try {
       const { data: fresh } = loadRepoData(data.repoRoot);
       filesCache.current.clear();
       setData(fresh);
+      return fresh;
     } catch {
       /* transient (gt mid-write); next watch tick will retry */
+      return null;
     }
   }, [data.repoRoot]);
 
@@ -161,6 +200,56 @@ export function App({ initial, paths }: Props) {
     };
   }, [data]);
 
+  // Fetch live per-PR status (comment thread counts + CI state) for every
+  // branch that has a PR, in one batched gh call. This data lives only on
+  // GitHub (Graphite doesn't cache it), so unlike everything else it isn't
+  // covered by the file watcher.
+  const refreshPrStatus = useCallback(
+    async (repo: RepoData = data) => {
+      const prNumbers: number[] = [];
+      for (const b of repo.branches.values())
+        if (b.pr) prNumbers.push(b.pr.prNumber);
+      if (!prNumbers.length) return;
+      const status = await fetchPrStatus(repo.repoRoot, prNumbers);
+      if (status.size > 0) setPrStatus(status);
+    },
+    [data]
+  );
+
+  // Re-fetch when the set of PR numbers changes (initial load, branch gains or
+  // loses a PR).
+  const prNumberKey = useMemo(() => {
+    const ns: number[] = [];
+    for (const b of data.branches.values()) if (b.pr) ns.push(b.pr.prNumber);
+    return ns.sort((a, z) => a - z).join(",");
+  }, [data]);
+
+  useEffect(() => {
+    if (!prNumberKey) return;
+    const prNumbers = prNumberKey.split(",").map(Number);
+    let cancelled = false;
+    (async () => {
+      const status = await fetchPrStatus(data.repoRoot, prNumbers);
+      if (!cancelled && status.size > 0) setPrStatus(status);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prNumberKey, data.repoRoot]);
+
+  // Enable terminal focus reporting so we learn when this window/tab regains
+  // focus. The terminal then emits CSI I on focus-in and CSI O on focus-out,
+  // which Ink delivers to useInput as "[I" / "[O" (see key handler below).
+  useEffect(() => {
+    stdout?.write("\x1b[?1004h");
+    return () => {
+      stdout?.write("\x1b[?1004l");
+    };
+  }, [stdout]);
+  // Throttle focus-driven refetches so rapid window switching can't hammer gh.
+  const lastFocusFetch = useRef(0);
+
   const runAction = useCallback(
     async (label: string, fn: () => Promise<gt.ActionResult>) => {
       if (busy) return;
@@ -169,15 +258,52 @@ export function App({ initial, paths }: Props) {
       const res = await fn();
       setBusy(null);
       setMessage({ text: res.message, ok: res.ok });
-      reload();
+      setErrorDetail(res.ok ? null : (res.detail ?? null));
+      const fresh = reload();
+      // Also pull fresh comment/CI status — a gt action may have created,
+      // updated, or removed PRs, and that data lives only on GitHub.
+      if (fresh) refreshPrStatus(fresh);
+      return fresh;
     },
-    [busy, reload]
+    [busy, reload, refreshPrStatus]
   );
+
+  // Set a transient status message that carries no expandable detail (so the
+  // "e: error details" affordance only appears for real command failures).
+  const notify = useCallback((text: string, ok: boolean) => {
+    setMessage({ text, ok });
+    setErrorDetail(null);
+  }, []);
 
   // --- key handling ---
   useInput((input, key) => {
+    // Terminal focus events (enabled via focus reporting above): "[I" on
+    // focus-in, "[O" on focus-out. Regaining focus is a good moment to pull
+    // fresh comment counts, since GitHub state may have changed while away.
+    if (input === "[I") {
+      const now = Date.now();
+      if (now - lastFocusFetch.current > 3000) {
+        lastFocusFetch.current = now;
+        refreshPrStatus();
+      }
+      return;
+    }
+    if (input === "[O") return;
+
     if (mode === "help") {
       if (input === "?" || key.escape) setMode("normal");
+      return;
+    }
+    if (mode === "error") {
+      if (key.escape || input === "e" || input === "q") {
+        setMode("normal");
+      } else if (key.upArrow || input === "k") {
+        setErrorScroll((s) => Math.max(0, s - 1));
+      } else if (key.downArrow || input === "j") {
+        const lineCount = errorDetail ? errorDetail.split("\n").length : 0;
+        const vis = Math.max(3, (stdout?.rows ?? 24) - 7);
+        setErrorScroll((s) => Math.min(Math.max(0, lineCount - vis), s + 1));
+      }
       return;
     }
     if (mode === "confirm-delete") {
@@ -193,10 +319,10 @@ export function App({ initial, paths }: Props) {
     if (mode === "copy") {
       if (input === "u" && selectedRow?.branch.pr) {
         clipboard.writeSync(selectedRow.branch.pr.url);
-        setMessage({ text: "Copied PR url", ok: true });
+        notify("Copied PR url", true);
       } else if (input === "b" && selectedRow) {
         clipboard.writeSync(selectedRow.branch.name);
-        setMessage({ text: "Copied branch name", ok: true });
+        notify("Copied branch name", true);
       }
       setMode("normal");
       return;
@@ -264,7 +390,7 @@ export function App({ initial, paths }: Props) {
     } else if (input === "o") {
       if (selectedRow?.branch.pr)
         runAction("opening PR", () => gt.openPr(data.repoRoot, selectedRow.branch.name));
-      else setMessage({ text: "No PR for this branch", ok: false });
+      else notify("No PR for this branch", false);
     } else if (input === "O") {
       if (selectedRow)
         runAction("opening stack", () =>
@@ -274,8 +400,8 @@ export function App({ initial, paths }: Props) {
       if (selectedRow?.branch.pr) {
         const url = githubPrUrl(data.repoRoot, selectedRow.branch.pr.prNumber);
         if (url) runAction("opening GitHub PR", () => gt.openUrl(url));
-        else setMessage({ text: "No GitHub remote found", ok: false });
-      } else setMessage({ text: "No PR for this branch", ok: false });
+        else notify("No GitHub remote found", false);
+      } else notify("No PR for this branch", false);
     } else if (input === "s") {
       runAction("syncing", () => gt.sync(data.repoRoot));
     } else if (input === "r") {
@@ -284,26 +410,48 @@ export function App({ initial, paths }: Props) {
       runAction("submitting stack", () => gt.submitStack(data.repoRoot));
     } else if (input === "d") {
       if (selectedRow && !selectedRow.branch.isTrunk) setMode("confirm-delete");
-      else setMessage({ text: "Cannot delete trunk", ok: false });
+      else notify("Cannot delete trunk", false);
     } else if (input === "y") {
       if (selectedRow) setMode("copy");
     } else if (input === "/") {
       setMode("filter");
     } else if (input === "R") {
-      reload();
-      setMessage({ text: "Refreshed", ok: true });
+      const fresh = reload();
+      if (fresh) refreshPrStatus(fresh);
+      notify("Refreshed", true);
+    } else if (input === "e") {
+      if (errorDetail) {
+        setErrorScroll(0);
+        setMode("error");
+      }
     } else if (input === "?") {
       setMode("help");
     }
   });
 
   if (mode === "help") return <HelpOverlay />;
+  if (mode === "error" && errorDetail)
+    return (
+      <ErrorOverlay
+        text={errorDetail}
+        scrollOffset={errorScroll}
+        visible={Math.max(3, (stdout?.rows ?? 24) - 7)}
+      />
+    );
 
   const totalWidth = stdout?.columns ?? 80;
-  // Reserve space for arrow(2) + gutter(2*cols) + metadata(~28).
+  // Cap content width so right-aligned metadata stays close to the titles on
+  // wide/full-screen terminals instead of being pushed to the far edge.
+  const MAX_CONTENT_WIDTH = 160;
+  // Subtract the root Box's paddingX={1} (2 cols) so the branch list and file
+  // panel share the same usable width and their right edges line up.
+  const contentWidth = Math.min(totalWidth - 2, MAX_CONTENT_WIDTH);
+  // Reserve space for arrow(2) + gutter(2*cols) + metadata (CI icon, #pr,
+  // comments, badge, age, ahead/behind ~40). Under-reserving lets a metadata-
+  // heavy row overflow the row width and wrap, which shifts the graph gutter.
   const titleWidth = Math.max(
     20,
-    totalWidth - 2 - columnCount * 2 - 30
+    contentWidth - 2 - columnCount * 2 - 40
   );
 
   // Constrain the whole UI to the terminal height so neither a tall file list
@@ -352,16 +500,18 @@ export function App({ initial, paths }: Props) {
   return (
     <Box flexDirection="column" paddingX={1} height={frameRows} overflow="hidden">
       <Box flexDirection="column" flexShrink={0}>
-        <Header repoRoot={data.repoRoot} trunk={data.trunk} busy={busy} />
+        <Header repoRoot={data.repoRoot} busy={busy} width={contentWidth} />
 
         <StackGraph
           rows={rows}
           columnCount={columnCount}
           selectedIndex={selected}
+          width={contentWidth}
           titleWidth={titleWidth}
           scrollOffset={branchOffset}
           visible={branchVisible}
           conflictedBranches={conflictedBranches}
+          prStatus={prStatus}
         />
 
         {mode === "filter" && (
@@ -399,7 +549,7 @@ export function App({ initial, paths }: Props) {
             cursor={fileCursor}
             scrollOffset={scrollOffset}
             visible={visible}
-            width={totalWidth - 2}
+            width={contentWidth}
           />
         )}
       </Box>
@@ -415,14 +565,15 @@ export function App({ initial, paths }: Props) {
           </Text>
         )}
         <StatusBar
-          currentBranch={data.currentBranch}
           message={message}
           hint={
             mode === "filter"
-              ? "esc clear · ↵ keep filter"
+              ? FILTER_HINT
               : focus === "files"
-                ? "j/k scroll files · Tab/esc back to branches · q quit"
-                : NORMAL_HINT
+                ? FILES_HINT
+                : errorDetail
+                  ? [["e", "error details"], ...NORMAL_HINT]
+                  : NORMAL_HINT
           }
         />
       </Box>

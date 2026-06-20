@@ -27,6 +27,27 @@ export type ReviewDecision =
   | "REVIEW_REQUIRED"
   | null;
 
+/**
+ * Resolved/total review comment threads for a PR. Not in Graphite's cache —
+ * fetched best-effort from GitHub via `gh`, keyed by PR number.
+ */
+export interface ReviewThreadCounts {
+  total: number;
+  resolved: number;
+}
+
+/** Rolled-up CI status for a PR's head commit. `null` when it has no checks. */
+export type CiStatus = "passed" | "failed" | "pending" | null;
+
+/**
+ * Live PR data fetched best-effort from GitHub (not in Graphite's cache),
+ * keyed by PR number. Both fields come from a single batched `gh` query.
+ */
+export interface PrLiveStatus {
+  threads: ReviewThreadCounts;
+  ci: CiStatus;
+}
+
 /** Entry from `.graphite_pr_info`, keyed by headRefName. */
 export interface PrInfo {
   prNumber: number;
@@ -46,6 +67,10 @@ export interface ChangedFile {
   status: string;
   /** Repo-relative path (the new path for renames). */
   path: string;
+  /** Lines added (0 for binary files or when unknown). */
+  additions: number;
+  /** Lines removed (0 for binary files or when unknown). */
+  deletions: number;
 }
 
 /** A branch combined with its PR info and display metadata. */
@@ -61,6 +86,14 @@ export interface Branch {
   state: string | null;
   /** Relative age string, abbreviated e.g. "2d", "5h". */
   age: string;
+  /** Local commits ahead of the upstream tracking branch (unpushed). 0 if none/no upstream. */
+  ahead: number;
+  /** Commits the upstream tracking branch is ahead by (unpulled). 0 if none/no upstream. */
+  behind: number;
+  /** Upstream tracking ref is configured but gone from the remote. */
+  upstreamGone: boolean;
+  /** Branch has never been pushed (no upstream) while a remote exists. */
+  unpushed: boolean;
   /** PR info if this branch has a submitted PR. */
   pr: PrInfo | null;
   /** PR title when available, otherwise the branch name. */
