@@ -279,11 +279,21 @@ export function App({ initial, paths }: Props) {
     totalWidth - 2 - columnCount * 2 - 30
   );
 
-  // Files panel sizing: fill the rows left under the (static) top section.
+  // Constrain the whole UI to the terminal height so a tall file list can
+  // never push a frame past the screen (which strands a stale frame at the
+  // top). The top section (header + graph) is pinned; the files panel fills
+  // and clips the remaining space; the status bar is pinned at the bottom.
   const totalRows = stdout?.rows ?? 24;
-  const topUsed = 1 /*pad*/ + 2 /*header+margin*/ + rows.length;
-  const reserved = topUsed + 3 /*status*/ + 2 /*panel header + margin*/;
-  const visible = Math.max(3, totalRows - reserved);
+  // Lines used outside the files panel: header (2) + graph + dialog (≤2) +
+  // status bar (marginTop + message + wrapped hint, budget generously).
+  const dialogLines = mode === "normal" ? 0 : mode === "confirm-delete" ? 3 : 2;
+  const topLines = 2 + rows.length + dialogLines;
+  const statusLines = (message ? 1 : 0) + 4;
+  const panelChrome = 1 /*marginTop*/ + 1 /*panel header*/ + 2 /*more rows*/;
+  const visible = Math.max(
+    3,
+    totalRows - topLines - statusLines - panelChrome
+  );
   const maxOffset = Math.max(0, files.length - visible);
   const scrollOffset = Math.min(
     maxOffset,
@@ -291,64 +301,70 @@ export function App({ initial, paths }: Props) {
   );
 
   return (
-    <Box flexDirection="column" paddingX={1}>
-      <Header repoRoot={data.repoRoot} trunk={data.trunk} busy={busy} />
+    <Box flexDirection="column" paddingX={1} height={totalRows} overflow="hidden">
+      <Box flexDirection="column" flexShrink={0}>
+        <Header repoRoot={data.repoRoot} trunk={data.trunk} busy={busy} />
 
-      <StackGraph
-        rows={rows}
-        columnCount={columnCount}
-        selectedIndex={selected}
-        titleWidth={titleWidth}
-      />
-
-      {mode === "filter" && (
-        <Box marginTop={1}>
-          <Text color="yellow">/</Text>
-          <Text>{query}</Text>
-          <Text color="gray">▏</Text>
-        </Box>
-      )}
-
-      {mode === "confirm-delete" && selectedRow && (
-        <Box marginTop={1}>
-          <ConfirmDialog message={`Delete branch ${selectedRow.branch.name}?`} />
-        </Box>
-      )}
-
-      {mode === "copy" && (
-        <Box marginTop={1}>
-          <Text color="gray">
-            copy: <Text color="yellow">u</Text> PR url ·{" "}
-            <Text color="yellow">b</Text> branch name · esc cancel
-          </Text>
-        </Box>
-      )}
-
-      {selBranch && (
-        <FilesPanel
-          branchName={selBranch.name}
-          files={files}
-          loading={filesLoading}
-          noParent={noParent}
-          focused={focus === "files"}
-          cursor={fileCursor}
-          scrollOffset={scrollOffset}
-          visible={visible}
-          width={totalWidth - 2}
+        <StackGraph
+          rows={rows}
+          columnCount={columnCount}
+          selectedIndex={selected}
+          titleWidth={titleWidth}
         />
-      )}
 
-      <StatusBar
-        currentBranch={data.currentBranch}
-        message={message}
-        hint={
-          mode === "filter"
-            ? "esc clear · ↵ keep filter"
-            : focus === "files"
-              ? "j/k scroll files · Tab/esc back to branches · q quit"
-              : NORMAL_HINT
-        }
-      />
+        {mode === "filter" && (
+          <Box marginTop={1}>
+            <Text color="yellow">/</Text>
+            <Text>{query}</Text>
+            <Text color="gray">▏</Text>
+          </Box>
+        )}
+
+        {mode === "confirm-delete" && selectedRow && (
+          <Box marginTop={1}>
+            <ConfirmDialog message={`Delete branch ${selectedRow.branch.name}?`} />
+          </Box>
+        )}
+
+        {mode === "copy" && (
+          <Box marginTop={1}>
+            <Text color="gray">
+              copy: <Text color="yellow">u</Text> PR url ·{" "}
+              <Text color="yellow">b</Text> branch name · esc cancel
+            </Text>
+          </Box>
+        )}
+      </Box>
+
+      <Box flexGrow={1} flexDirection="column" overflow="hidden">
+        {selBranch && (
+          <FilesPanel
+            branchName={selBranch.name}
+            files={files}
+            loading={filesLoading}
+            noParent={noParent}
+            focused={focus === "files"}
+            cursor={fileCursor}
+            scrollOffset={scrollOffset}
+            visible={visible}
+            width={totalWidth - 2}
+          />
+        )}
+      </Box>
+
+      <Box flexShrink={0}>
+        <StatusBar
+          currentBranch={data.currentBranch}
+          message={message}
+          hint={
+            mode === "filter"
+              ? "esc clear · ↵ keep filter"
+              : focus === "files"
+                ? "j/k scroll files · Tab/esc back to branches · q quit"
+                : NORMAL_HINT
+          }
+        />
+      </Box>
     </Box>
   );
 }
