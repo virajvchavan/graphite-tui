@@ -3,6 +3,7 @@ import { Box, Text } from "ink";
 
 const KEYS: [string, string][] = [
   ["↑/k ↓/j", "move selection"],
+  ["Tab", "focus files panel (j/k scroll, Tab back)"],
   ["↵ or c", "checkout branch"],
   ["o / O", "open PR / stack on Graphite"],
   ["g", "open PR on GitHub"],

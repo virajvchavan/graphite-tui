@@ -16,7 +16,29 @@ export const colors = {
   prNumber: "gray",
   age: "gray",
   dim: "gray",
+  // changed-files panel
+  modified: "yellow",
+  added: "green",
+  deleted: "red",
+  renamed: "cyan",
+  fileDir: "gray",
+  fileName: "white",
 } as const;
+
+/** Color for a git name-status letter. */
+export function fileStatusColor(status: string): string {
+  switch (status) {
+    case "A":
+      return colors.added;
+    case "D":
+      return colors.deleted;
+    case "R":
+    case "C":
+      return colors.renamed;
+    default:
+      return colors.modified; // M, T, U, ...
+  }
+}
 
 /** Short colored badge text for a PR's status. Returns null when no PR. */
 export function prBadge(

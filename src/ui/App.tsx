@@ -1,16 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import fuzzysort from "fuzzysort";
 import clipboard from "clipboardy";
-import type { RenderRow, RepoData } from "../types.js";
+import type { ChangedFile, RenderRow, RepoData } from "../types.js";
 import type { RepoPaths } from "../data/repo.js";
 import { loadRepoData } from "../data/load.js";
 import { githubPrUrl } from "../data/git.js";
+import { getChangedFiles } from "../data/files.js";
 import { buildRenderRows } from "../model/tree.js";
 import { watchRepo } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
 import { Header } from "./Header.js";
 import { StackGraph } from "./StackGraph.js";
+import { FilesPanel } from "./FilesPanel.js";
 import { StatusBar } from "./StatusBar.js";
 import { HelpOverlay } from "./HelpOverlay.js";
 import { ConfirmDialog } from "./ConfirmDialog.js";
@@ -28,7 +30,7 @@ interface Msg {
 }
 
 const NORMAL_HINT =
-  "↵ checkout · o Graphite · g GitHub · s sync · r restack · S submit · d delete · / filter · y copy · ? help · q quit";
+  "↵ checkout · o Graphite · g GitHub · s sync · r restack · S submit · d delete · Tab files · / filter · y copy · ? help · q quit";
 
 export function App({ initial, paths }: Props) {
   const { exit } = useApp();
@@ -39,6 +41,13 @@ export function App({ initial, paths }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<Msg | null>(null);
   const [query, setQuery] = useState("");
+
+  // Changed-files panel state.
+  const [focus, setFocus] = useState<"branches" | "files">("branches");
+  const [files, setFiles] = useState<ChangedFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [fileCursor, setFileCursor] = useState(0);
+  const filesCache = useRef<Map<string, ChangedFile[]>>(new Map());
 
   const allRows = useMemo(() => buildRenderRows(data), [data]);
 
@@ -76,6 +85,7 @@ export function App({ initial, paths }: Props) {
   const reload = useCallback(() => {
     try {
       const { data: fresh } = loadRepoData(data.repoRoot);
+      filesCache.current.clear();
       setData(fresh);
     } catch {
       /* transient (gt mid-write); next watch tick will retry */
@@ -86,6 +96,43 @@ export function App({ initial, paths }: Props) {
   useEffect(() => watchRepo(paths, reload), [paths, reload]);
 
   const selectedRow: RenderRow | undefined = rows[selected];
+  const selBranch = selectedRow?.branch;
+  const noParent = !selBranch || selBranch.isTrunk || !selBranch.parent;
+  const fileKey = selBranch ? `${selBranch.name}@${selBranch.revision}` : "";
+
+  // Load changed files for the selected branch (debounced, cached, stale-guarded).
+  useEffect(() => {
+    setFileCursor(0);
+    if (!selBranch || noParent) {
+      setFiles([]);
+      setFilesLoading(false);
+      return;
+    }
+    const cached = filesCache.current.get(fileKey);
+    if (cached) {
+      setFiles(cached);
+      setFilesLoading(false);
+      return;
+    }
+    setFilesLoading(true);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const result = await getChangedFiles(
+        data.repoRoot,
+        selBranch.parent,
+        selBranch.name
+      );
+      if (cancelled) return;
+      filesCache.current.set(fileKey, result);
+      setFiles(result);
+      setFilesLoading(false);
+    }, 120);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileKey, data.repoRoot]);
 
   const runAction = useCallback(
     async (label: string, fn: () => Promise<gt.ActionResult>) => {
@@ -153,12 +200,28 @@ export function App({ initial, paths }: Props) {
       return;
     }
 
+    // files-panel focus: scroll the file list
+    if (focus === "files") {
+      if (key.tab || key.escape) {
+        setFocus("branches");
+      } else if (input === "q" || (key.ctrl && input === "c")) {
+        exit();
+      } else if (key.upArrow || input === "k") {
+        setFileCursor((c) => Math.max(0, c - 1));
+      } else if (key.downArrow || input === "j") {
+        setFileCursor((c) => Math.min(files.length - 1, c + 1));
+      }
+      return;
+    }
+
     // normal mode
     if (input === "q" || (key.ctrl && input === "c")) {
       exit();
       return;
     }
-    if (key.upArrow || input === "k") {
+    if (key.tab) {
+      if (files.length) setFocus("files");
+    } else if (key.upArrow || input === "k") {
       setSelected((s) => Math.max(0, s - 1));
     } else if (key.downArrow || input === "j") {
       setSelected((s) => Math.min(rows.length - 1, s + 1));
@@ -216,6 +279,17 @@ export function App({ initial, paths }: Props) {
     totalWidth - 2 - columnCount * 2 - 30
   );
 
+  // Files panel sizing: fill the rows left under the (static) top section.
+  const totalRows = stdout?.rows ?? 24;
+  const topUsed = 1 /*pad*/ + 2 /*header+margin*/ + rows.length;
+  const reserved = topUsed + 3 /*status*/ + 2 /*panel header + margin*/;
+  const visible = Math.max(3, totalRows - reserved);
+  const maxOffset = Math.max(0, files.length - visible);
+  const scrollOffset = Math.min(
+    maxOffset,
+    fileCursor < visible ? 0 : fileCursor - visible + 1
+  );
+
   return (
     <Box flexDirection="column" paddingX={1}>
       <Header repoRoot={data.repoRoot} trunk={data.trunk} busy={busy} />
@@ -250,10 +324,30 @@ export function App({ initial, paths }: Props) {
         </Box>
       )}
 
+      {selBranch && (
+        <FilesPanel
+          branchName={selBranch.name}
+          files={files}
+          loading={filesLoading}
+          noParent={noParent}
+          focused={focus === "files"}
+          cursor={fileCursor}
+          scrollOffset={scrollOffset}
+          visible={visible}
+          width={totalWidth - 2}
+        />
+      )}
+
       <StatusBar
         currentBranch={data.currentBranch}
         message={message}
-        hint={mode === "filter" ? "esc clear · ↵ keep filter" : NORMAL_HINT}
+        hint={
+          mode === "filter"
+            ? "esc clear · ↵ keep filter"
+            : focus === "files"
+              ? "j/k scroll files · Tab/esc back to branches · q quit"
+              : NORMAL_HINT
+        }
       />
     </Box>
   );

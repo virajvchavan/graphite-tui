@@ -40,11 +40,21 @@ export interface PrInfo {
   authorGithubHandle?: string;
 }
 
+/** A file changed in a branch's diff against its parent. */
+export interface ChangedFile {
+  /** Git status: M | A | D | R | C | T | U. */
+  status: string;
+  /** Repo-relative path (the new path for renames). */
+  path: string;
+}
+
 /** A branch combined with its PR info and display metadata. */
 export interface Branch {
   name: string;
   parent: string | null;
   children: string[];
+  /** This branch's tip revision (used to key the changed-files cache). */
+  revision: string | null;
   isTrunk: boolean;
   /** True when validationResult is not VALID/TRUNK (needs restack). */
   needsRestack: boolean;

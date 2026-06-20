@@ -53,6 +53,7 @@ export function loadRepoData(cwd: string): { data: RepoData; paths: RepoPaths } 
       name,
       parent: m.parentBranchName,
       children: m.children,
+      revision: m.branchRevision,
       isTrunk: trunk,
       needsRestack,
       state: m.state,

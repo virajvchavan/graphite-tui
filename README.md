@@ -39,6 +39,7 @@ your PATH.
 | Key | Action |
 |-----|--------|
 | `↑`/`k`, `↓`/`j` | move selection |
+| `Tab` | focus the changed-files panel (then `j`/`k` scroll, `Tab`/`Esc` back) |
 | `Enter` / `c` | checkout selected branch |
 | `o` / `O` | open PR / stack page on Graphite |
 | `g` | open PR on GitHub |
@@ -51,6 +52,10 @@ your PATH.
 | `R` | refresh |
 | `?` | help · `q` quit |
 
+A panel below the graph lists the files each branch's PR changes (its diff
+against its parent), colored by git status. It updates as you move between
+branches; press `Tab` to focus and scroll it.
+
 The view auto-refreshes when you run `gt` in another terminal.
 
 ## How it works
@@ -62,6 +67,7 @@ Graphite's local caches directly (fast, exact):
 - **PR metadata** — `.git/.graphite_pr_info` (JSON)
 - **Trunk** — `.git/.graphite_repo_config`
 - **Ages / current branch** — `git for-each-ref` / `git branch --show-current`
+- **Changed files** — `git diff --name-status <parent>...<branch>`
 
 Mutations (checkout, sync, restack, submit, delete) and opening PRs shell out to
 `gt`. All Graphite-format parsing is isolated in `src/data/` so a `gt` format
