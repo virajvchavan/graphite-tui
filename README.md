@@ -6,6 +6,8 @@
 A keyboard-driven terminal UI for [Graphite](https://graphite.com) PR stacks —
 a replacement for the Graphite VSCode extension's "Branches" sidebar.
 
+https://github.com/user-attachments/assets/e11027a0-0066-4cab-ae8f-df63957ccfe5
+
 Run `graphite-tui` inside any Graphite-initialized git repo and it renders the
 repo's stacks with dependency lines, PR status, and age, fully controllable by
 keyboard.
