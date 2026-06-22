@@ -12,6 +12,9 @@ export interface GraphCell {
 const NODE_CURRENT = "●";
 const NODE_TRUNK = "◯";
 const NODE_DEFAULT = "◯";
+// Dotted ring for a branch that needs a restack (stale parent), mirroring the
+// dotted edges Graphite's other clients draw for out-of-date branches.
+const NODE_RESTACK = "◌";
 
 /**
  * Build the per-column gutter cells for a row. Each cell is 2 chars wide
@@ -30,9 +33,11 @@ export function buildGutter(row: RenderRow, columnCount: number): GraphCell[] {
     if (c === nodeCol) {
       glyph = row.branch.isTrunk
         ? NODE_TRUNK
-        : row.isCurrent
-          ? NODE_CURRENT
-          : NODE_DEFAULT;
+        : row.branch.needsRestack
+          ? NODE_RESTACK
+          : row.isCurrent
+            ? NODE_CURRENT
+            : NODE_DEFAULT;
       isNode = true;
     } else if (mergeCols.includes(c)) {
       glyph = "┘";

@@ -17,7 +17,7 @@ export function ConfirmDialog({ message }: Props) {
         {message}
       </Text>
       <Text color="gray">
-        press <Text color="yellow">y</Text> to confirm,{" "}
+        press <Text color="yellow">↵</Text> to confirm,{" "}
         <Text color="yellow">n</Text>/esc to cancel
       </Text>
     </Box>

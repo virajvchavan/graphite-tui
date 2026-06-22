@@ -365,7 +365,7 @@ export function App({ initial, paths }: Props) {
       return;
     }
     if (mode === "confirm-delete") {
-      if (input === "y" && selectedRow) {
+      if (key.return && selectedRow) {
         const name = selectedRow.branch.name;
         setMode("normal");
         runAction(`deleting ${name}`, () => gt.deleteBranch(data.repoRoot, name));
