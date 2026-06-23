@@ -3,7 +3,7 @@ import { getRemoteOwnerRepo } from "./git.js";
 import type { CiStatus, PrLiveStatus } from "../types.js";
 
 /** Map GitHub's StatusState enum to our coarse CI status. */
-function mapCiState(state: unknown): CiStatus {
+export function mapCiState(state: unknown): CiStatus {
   switch (state) {
     case "SUCCESS":
       return "passed";

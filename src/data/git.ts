@@ -14,6 +14,15 @@ export function getRemoteWebUrl(repoRoot: string): string | null {
   } catch {
     return null;
   }
+  return parseRemoteUrl(url);
+}
+
+/**
+ * Normalize a git remote URL (SSH `git@host:owner/repo.git`, or
+ * `https://`/`ssh://` with an optional `user@` and optional `.git`) into its
+ * `https://host/owner/repo` web form. Returns null when the URL isn't parseable.
+ */
+export function parseRemoteUrl(url: string): string | null {
   // git@github.com:owner/repo.git  ->  https://github.com/owner/repo
   const ssh = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
   if (ssh) return `https://${ssh[1]}/${ssh[2]}`;

@@ -42,6 +42,14 @@ import { InputOverlay } from "./InputOverlay.js";
 import { DiffOverlay, diffVisibleRows } from "./DiffOverlay.js";
 import type { DetailLine } from "./Modal.js";
 import { applyTheme, colors, getThemeMode, prBadge } from "./theme.js";
+import {
+  changedFilesKey,
+  type Focus,
+  nextFocus,
+  normalHint,
+  prNumbersOf,
+  worktreeHint,
+} from "./appLogic.js";
 
 type Mode =
   | "normal"
@@ -53,7 +61,6 @@ type Mode =
   | "input"
   | "diff";
 
-type Focus = "branches" | "files" | "worktree" | "logs";
 
 /**
  * A pending destructive action awaiting Enter confirmation, shown full-screen
@@ -91,32 +98,6 @@ interface Msg {
   ok: boolean;
 }
 
-// Keyboard hints as [key, label] pairs so the StatusBar can style the key
-// distinctly from its description.
-const NORMAL_HINT: Array<[string, string]> = [
-  ["↵", "checkout"],
-  ["o", "Graphite"],
-  ["g", "GitHub"],
-  ["G", "get"],
-  ["s", "sync"],
-  ["r", "restack"],
-  ["S", "submit"],
-  ["d", "delete"],
-  ["Tab", "files"],
-  ["/", "filter"],
-  ["y", "copy"],
-  ["?", "help"],
-];
-// Keys that act on a real (non-trunk) branch — opening its PR (o/g), restacking
-// or submitting it (r/S), or deleting it (d). Trunk has no PR and can't be
-// restacked, submitted, or deleted, so these are dropped from the hint bar when
-// the selected row is trunk.
-const TRUNK_OMIT_KEYS = new Set(["o", "g", "r", "S", "d"]);
-function normalHint(selectedIsTrunk: boolean): Array<[string, string]> {
-  return selectedIsTrunk
-    ? NORMAL_HINT.filter(([key]) => !TRUNK_OMIT_KEYS.has(key))
-    : NORMAL_HINT;
-}
 const FILTER_HINT: Array<[string, string]> = [
   ["esc", "clear"],
   ["↵", "keep filter"],
@@ -132,25 +113,6 @@ const FILES_COLLAPSED_HINT: Array<[string, string]> = [
   ["Tab", "next"],
   ["?", "help"],
 ];
-// Working-tree hints. The amend/commit (off trunk) and create-branch (on trunk)
-// actions act on staged changes, so they only appear once something is staged.
-function worktreeHint(
-  onTrunk: boolean,
-  hasStaged: boolean
-): Array<[string, string]> {
-  const hint: Array<[string, string]> = [
-    ["↵", "open"],
-    ["a/A", "stage"],
-    ["u/U", "unstage"],
-    ["x/X", "discard"],
-  ];
-  if (hasStaged) {
-    if (onTrunk) hint.push(["c", "create branch"]);
-    else hint.push(["m", "amend"], ["c", "commit"]);
-  }
-  hint.push(["Tab", "next"], ["?", "help"]);
-  return hint;
-}
 const INPUT_HINT: Array<[string, string]> = [
   ["↵", "submit"],
   ["esc", "cancel"],
@@ -169,50 +131,6 @@ const WORKTREE_VISIBLE = 8;
 
 /** Basename of a repo-relative path, for concise status messages. */
 const baseName = (p: string) => p.split("/").pop() || p;
-
-/**
- * Next focusable panel in the cycle branches → worktree → files → logs →
- * branches, skipping any panel that isn't currently shown.
- */
-function nextFocus(
-  current: Focus,
-  shown: { worktree: boolean; files: boolean; logs: boolean }
-): Focus {
-  const order: Focus[] = ["branches", "worktree", "files", "logs"];
-  const isShown = (f: Focus) =>
-    f === "branches" ||
-    (f === "worktree" && shown.worktree) ||
-    (f === "files" && shown.files) ||
-    (f === "logs" && shown.logs);
-  const start = order.indexOf(current);
-  for (let i = 1; i <= order.length; i++) {
-    const cand = order[(start + i) % order.length];
-    if (isShown(cand)) return cand;
-  }
-  return "branches";
-}
-
-/**
- * Cache key for a branch's changed-files diff. Includes the parent's tip
- * revision (not just the branch's own) so the three-dot/merge-base diff is
- * refetched when the parent moves even if this branch hasn't been restacked
- * yet. Entries are thus self-invalidating: a new revision yields a new key and
- * is refetched, while superseded keys simply go unused — so the cache never
- * needs to be wholesale-cleared (which caused the visible diff to flicker).
- */
-function changedFilesKey(branch: Branch, branches: Map<string, Branch>): string {
-  const parentRev = branch.parent
-    ? (branches.get(branch.parent)?.revision ?? "")
-    : "";
-  return `${branch.name}@${branch.revision}~${parentRev}`;
-}
-
-/** PR numbers for every branch that has a PR. */
-function prNumbersOf(repo: RepoData): number[] {
-  const ns: number[] = [];
-  for (const b of repo.branches.values()) if (b.pr) ns.push(b.pr.prNumber);
-  return ns;
-}
 
 export function App({ initial, paths }: Props) {
   const { exit } = useApp();

@@ -14,13 +14,13 @@ interface RawPr {
   authorGithubHandle?: string;
 }
 
-function normalizeState(s: string): PrState {
+export function normalizeState(s: string): PrState {
   const up = s?.toUpperCase();
   if (up === "MERGED" || up === "CLOSED") return up;
   return "OPEN";
 }
 
-function normalizeReview(s: string | null): ReviewDecision {
+export function normalizeReview(s: string | null): ReviewDecision {
   if (!s) return null;
   const up = s.toUpperCase();
   if (up === "APPROVED" || up === "CHANGES_REQUESTED" || up === "REVIEW_REQUIRED") {
