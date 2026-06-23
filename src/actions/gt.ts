@@ -1,5 +1,6 @@
 import { execa, type Options } from "execa";
 import * as commandLog from "./commandLog.js";
+import type { WorkingFile } from "../data/status.js";
 
 export interface ActionResult {
   ok: boolean;
@@ -101,6 +102,20 @@ async function runGt(
   }
 }
 
+/** Run a `git` subcommand non-interactively, logged like `runGt`. */
+async function runGit(
+  repoRoot: string,
+  args: string[],
+  successMsg: string
+): Promise<ActionResult> {
+  try {
+    await execLogged(`git ${args.join(" ")}`, "git", args, { cwd: repoRoot });
+    return { ok: true, message: successMsg };
+  } catch (err: unknown) {
+    return failure(err);
+  }
+}
+
 export const checkout = (repoRoot: string, branch: string) =>
   runGt(repoRoot, ["checkout", branch], `Checked out ${branch}`);
 
@@ -115,6 +130,13 @@ export const submitStack = (repoRoot: string) =>
 
 export const deleteBranch = (repoRoot: string, branch: string) =>
   runGt(repoRoot, ["delete", branch, "--force"], `Deleted ${branch}`);
+
+/**
+ * Pull a remote branch — and its ancestors, so the whole stack lands locally —
+ * down with `gt get`, tracking it in Graphite.
+ */
+export const getBranch = (repoRoot: string, branch: string) =>
+  runGt(repoRoot, ["get", branch], `Got ${branch}`);
 
 /** Open an arbitrary URL in the default browser, cross-platform. */
 export async function openUrl(url: string): Promise<ActionResult> {
@@ -153,3 +175,59 @@ export async function openPr(
     return failure(err);
   }
 }
+
+// --- working-tree actions ---
+
+const base = (p: string) => p.split("/").pop() || p;
+
+export const stageFile = (repoRoot: string, path: string) =>
+  runGit(repoRoot, ["add", "--", path], `Staged ${base(path)}`);
+
+export const stageAll = (repoRoot: string) =>
+  runGit(repoRoot, ["add", "-A"], "Staged all changes");
+
+export const unstageFile = (repoRoot: string, path: string) =>
+  runGit(repoRoot, ["restore", "--staged", "--", path], `Unstaged ${base(path)}`);
+
+export const unstageAll = (repoRoot: string) =>
+  runGit(repoRoot, ["restore", "--staged", "--", "."], "Unstaged all changes");
+
+/**
+ * Discard a single file's changes. Untracked files are removed (`git clean`);
+ * tracked files are reverted to HEAD in both the index and the worktree.
+ */
+export const discardFile = (repoRoot: string, file: WorkingFile) =>
+  file.untracked
+    ? runGit(repoRoot, ["clean", "-f", "--", file.path], `Removed ${base(file.path)}`)
+    : runGit(
+        repoRoot,
+        ["restore", "--staged", "--worktree", "--", file.path],
+        `Discarded ${base(file.path)}`
+      );
+
+/** Discard every change: revert tracked files and remove untracked ones. */
+export async function discardAll(repoRoot: string): Promise<ActionResult> {
+  const restore = await runGit(
+    repoRoot,
+    ["restore", "--staged", "--worktree", "--", "."],
+    "Discarded tracked changes"
+  );
+  if (!restore.ok) return restore;
+  const clean = await runGit(repoRoot, ["clean", "-fd"], "Discarded all changes");
+  return clean;
+}
+
+/** Amend the current branch's commit with the staged changes, then restack. */
+export const gtModify = (repoRoot: string) =>
+  runGt(repoRoot, ["modify"], "Modified current branch");
+
+/** Add the staged changes as a new commit on the current branch, then restack. */
+export const gtModifyCommit = (repoRoot: string, message: string) =>
+  runGt(repoRoot, ["modify", "--commit", "-m", message], "Added commit");
+
+/**
+ * Create a new branch stacked on the current one, committing the staged changes
+ * with `message`. gt derives the branch name from the message.
+ */
+export const createBranch = (repoRoot: string, message: string) =>
+  runGt(repoRoot, ["create", "-m", message], "Created branch");

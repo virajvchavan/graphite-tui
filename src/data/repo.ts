@@ -11,6 +11,8 @@ export interface RepoPaths {
   prInfo: string;
   repoConfig: string;
   head: string;
+  /** .git/index — touched on staging, so watching it picks up `git add` etc. */
+  index: string;
 }
 
 export class NotAGitRepoError extends Error {}
@@ -49,6 +51,7 @@ export function resolveRepoPaths(cwd: string): RepoPaths {
     prInfo: join(gitDir, ".graphite_pr_info"),
     repoConfig: join(gitDir, ".graphite_repo_config"),
     head: join(gitDir, "HEAD"),
+    index: join(gitDir, "index"),
   };
 }
 

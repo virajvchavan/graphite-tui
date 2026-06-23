@@ -18,7 +18,9 @@ async function main() {
   if (args.includes("--help") || args.includes("-h")) {
     process.stdout.write(
       `graphite-tui — keyboard-driven TUI for Graphite PR stacks\n\n` +
-        `Usage: graphite-tui [--debug-dump]\n\n` +
+        `Usage: graphite-tui [--light | --dark] [--debug-dump]\n\n` +
+        `Colors auto-detect the terminal background. Force a palette with\n` +
+        `--light / --dark or GRAPHITE_TUI_THEME=light|dark.\n\n` +
         `Run inside a Graphite-initialized git repo. Keys: ?  for help.\n`
     );
     return;
@@ -64,6 +66,13 @@ async function main() {
     process.stdout.write(JSON.stringify(out, null, 2) + "\n");
     return;
   }
+
+  // Resolve the color palette before the alt-screen switch (so the terminal's
+  // OSC 11 reply lands on the main screen, not the alt buffer) and before the
+  // UI renders. Defaults to dark when detection is inconclusive.
+  const { detectTheme } = await import("./ui/detectTheme.js");
+  const { applyTheme } = await import("./ui/theme.js");
+  applyTheme(await detectTheme(args));
 
   const { render } = await import("ink");
   const React = await import("react");

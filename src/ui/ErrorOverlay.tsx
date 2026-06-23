@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import { colors } from "./theme.js";
 
 interface Props {
   /** Full command output to display. */
@@ -25,23 +26,23 @@ export function ErrorOverlay({ text, scrollOffset, visible }: Props) {
     <Box
       flexDirection="column"
       borderStyle="round"
-      borderColor="red"
+      borderColor={colors.closed}
       paddingX={2}
       paddingY={1}
     >
-      <Text bold color="red">
+      <Text bold color={colors.closed}>
         Command failed{lines.length > visible ? ` (${lines.length} lines)` : ""}
       </Text>
       <Box height={1} />
-      {start > 0 && <Text color="gray">↑ {start} more</Text>}
+      {start > 0 && <Text color={colors.dim}>↑ {start} more</Text>}
       {window.map((line, i) => (
         <Text key={start + i} wrap="truncate-end">
           {line || " "}
         </Text>
       ))}
-      {more > 0 && <Text color="gray">↓ {more} more</Text>}
+      {more > 0 && <Text color={colors.dim}>↓ {more} more</Text>}
       <Box height={1} />
-      <Text color="gray">↑/↓ or j/k scroll · esc/e/q close</Text>
+      <Text color={colors.dim}>↑/↓ or j/k scroll · esc/e/q close</Text>
     </Box>
   );
 }

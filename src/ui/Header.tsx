@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import Spinner from "ink-spinner";
 import { basename } from "node:path";
+import { colors } from "./theme.js";
 
 interface Props {
   repoRoot: string;
@@ -19,15 +20,15 @@ export function Header({ repoRoot, busy, width }: Props) {
       </Box>
       <Box>
         {busy ? (
-          <Text color="cyan">
+          <Text color={colors.heading}>
             <Spinner type="dots" /> {busy}
           </Text>
         ) : (
           <Text wrap="truncate-end">
-            <Text color="white" bold>
+            <Text color={colors.text} bold>
               R
             </Text>
-            <Text color="gray">{" to refresh"}</Text>
+            <Text color={colors.dim}>{" to refresh"}</Text>
           </Text>
         )}
       </Box>

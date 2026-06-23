@@ -14,6 +14,7 @@ export function watchRepo(paths: RepoPaths, onChange: () => void): () => void {
     paths.repoConfig,
     paths.head,
     paths.gitDir,
+    paths.index,
   ];
   const watchers: FSWatcher[] = [];
   let timer: NodeJS.Timeout | null = null;

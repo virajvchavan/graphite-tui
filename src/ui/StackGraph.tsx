@@ -2,12 +2,14 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { PrLiveStatus, RenderRow } from "../types.js";
 import { BranchRow } from "./BranchRow.js";
-import { prBadge } from "./theme.js";
+import { colors, prBadge } from "./theme.js";
 
 interface Props {
   rows: RenderRow[];
   columnCount: number;
   selectedIndex: number;
+  /** Whether the branch list has focus (its selection is bright if so). */
+  focused: boolean;
   /** Max width of the rows; bounds where right-aligned metadata sits. */
   width: number;
   titleWidth: number;
@@ -25,6 +27,7 @@ export function StackGraph({
   rows,
   columnCount,
   selectedIndex,
+  focused,
   width,
   titleWidth,
   scrollOffset,
@@ -33,7 +36,7 @@ export function StackGraph({
   prStatus,
 }: Props) {
   if (rows.length === 0) {
-    return <Text color="gray">No tracked branches. Create one with `gt create`.</Text>;
+    return <Text color={colors.dim}>No tracked branches. Create one with `gt create`.</Text>;
   }
   const window = rows.slice(scrollOffset, scrollOffset + visible);
   const hiddenAbove = scrollOffset;
@@ -58,7 +61,7 @@ export function StackGraph({
   return (
     <Box flexDirection="column" width={width}>
       {hiddenAbove > 0 ? (
-        <Text color="gray">{`     ↑ ${hiddenAbove} more`}</Text>
+        <Text color={colors.dim}>{`     ↑ ${hiddenAbove} more`}</Text>
       ) : null}
       {window.map((row, i) => {
         const absolute = scrollOffset + i;
@@ -71,6 +74,7 @@ export function StackGraph({
             row={row}
             columnCount={columnCount}
             selected={absolute === selectedIndex}
+            focused={focused}
             width={width}
             titleWidth={titleWidth}
             prW={prW}
@@ -84,7 +88,7 @@ export function StackGraph({
         );
       })}
       {hiddenBelow > 0 ? (
-        <Text color="gray">{`     ↓ ${hiddenBelow} more`}</Text>
+        <Text color={colors.dim}>{`     ↓ ${hiddenBelow} more`}</Text>
       ) : null}
     </Box>
   );

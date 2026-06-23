@@ -40,7 +40,7 @@ your PATH.
 | Key | Action |
 |-----|--------|
 | `↑`/`k`, `↓`/`j` | move selection |
-| `Tab` | focus the changed-files panel (then `j`/`k` scroll, `Tab`/`Esc` back) |
+| `Tab` | cycle focus across the working-tree, changed-files, and command-log panels (`Esc` back to branches) |
 | `Enter` / `c` | checkout selected branch |
 | `o` / `O` | open PR / stack page on Graphite |
 | `g` | open PR on GitHub |
@@ -53,9 +53,30 @@ your PATH.
 | `R` | refresh |
 | `?` | help · `q` quit |
 
+### Working tree
+
+A **working tree** panel shows your live uncommitted changes (staged, unstaged,
+and untracked) for the current branch, with the two-char git status and per-file
+line counts. `Tab` to it, then:
+
+| Key | Action |
+|-----|--------|
+| `a` / `A` | stage file under cursor / all (`git add`) |
+| `u` / `U` | unstage file under cursor / all (`git restore --staged`) |
+| `space` | toggle stage/unstage of the file under cursor |
+| `x` / `X` | discard file under cursor / all changes (with confirmation) |
+| `m` | amend staged changes into the current branch (`gt modify`) |
+| `c` | add staged changes as a new commit with a message (`gt modify -c -m`) |
+| `m` / `c` *(on trunk)* | create a new branch from the staged changes (`gt create -m`) |
+
+It refreshes after each action, when the terminal regains focus, when `.git`
+changes, and on a 60s poll backstop (so external editor saves show up too).
+
 A panel below the graph lists the files each branch's PR changes (its diff
 against its parent), colored by git status. It updates as you move between
-branches; press `Tab` to focus and scroll it.
+branches; press `Tab` to focus and scroll it. On a short terminal this panel
+collapses to its header to keep the branch list and working tree visible —
+focus it and press `Enter` to expand it.
 
 Branches out of date with their parent show `⇈ restack` (yellow). If a
 `gt sync`/`gt restack` is paused on merge conflicts, the branch being rebased is
@@ -74,11 +95,13 @@ Graphite's local caches directly (fast, exact):
 - **Trunk** — `.git/.graphite_repo_config`
 - **Ages / current branch** — `git for-each-ref` / `git branch --show-current`
 - **Changed files** — `git diff --name-status <parent>...<branch>`
+- **Working tree** — `git status --porcelain=v1 -z`
 - **In-progress conflicts** — `.git/rebase-merge` + `git diff --diff-filter=U`
 
-Mutations (checkout, sync, restack, submit, delete) and opening PRs shell out to
-`gt`. All Graphite-format parsing is isolated in `src/data/` so a `gt` format
-change is a one-place fix.
+Mutations (checkout, sync, restack, submit, delete; staging, discarding, and
+`gt modify` on the working tree) and opening PRs shell out to `gt`/`git`. All
+Graphite-format parsing is isolated in `src/data/` so a `gt` format change is a
+one-place fix.
 
 ## Develop
 

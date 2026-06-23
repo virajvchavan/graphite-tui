@@ -81,7 +81,7 @@ function lineColor(kind: LineKind): string | undefined {
       // Subtle: a finished command is just a log anchor. A muted gray — lighter
       // than its dim output but dimmer than the white panel title — keeps the
       // hierarchy without competing with the header.
-      return "#9e9e9e";
+      return colors.commandDone;
     case "command-running":
       return colors.dim;
     case "command-error":
@@ -122,16 +122,16 @@ export function CommandLog({
   return (
     <Box flexDirection="column" marginTop={1} width={width}>
       <Box>
-        <Text color={focused ? colors.current : "gray"}>{caret} </Text>
+        <Text color={focused ? colors.current : colors.dim}>{caret} </Text>
         <Text bold color={focused ? colors.current : undefined}>
           logs
         </Text>
-        <Text color="gray">
+        <Text color={colors.dim}>
           {"  "}
           {entryCount} command{entryCount === 1 ? "" : "s"}
         </Text>
-        {hiddenAbove > 0 && <Text color="gray">{`  ↑ ${hiddenAbove} more`}</Text>}
-        {hiddenBelow > 0 && <Text color="gray">{`  ↓ ${hiddenBelow} more`}</Text>}
+        {hiddenAbove > 0 && <Text color={colors.dim}>{`  ↑ ${hiddenAbove} more`}</Text>}
+        {hiddenBelow > 0 && <Text color={colors.dim}>{`  ↓ ${hiddenBelow} more`}</Text>}
       </Box>
 
       {window.map((line, i) => {

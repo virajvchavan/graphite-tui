@@ -2,12 +2,14 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { CiStatus, RenderRow, ReviewThreadCounts } from "../types.js";
 import { buildGutter } from "./graph.js";
-import { ciBadge, colors, prBadge } from "./theme.js";
+import { ciBadge, colors, prBadge, selectionBg } from "./theme.js";
 
 interface Props {
   row: RenderRow;
   columnCount: number;
   selected: boolean;
+  /** Whether the branch list currently has focus (selection is bright if so). */
+  focused: boolean;
   /** Total row width; bounds where the right-aligned metadata sits. */
   width: number;
   /** Max width available for the title column. */
@@ -47,6 +49,7 @@ export function BranchRow({
   row,
   columnCount,
   selected,
+  focused,
   width,
   titleWidth,
   prW,
@@ -60,7 +63,7 @@ export function BranchRow({
   const cells = buildGutter(row, columnCount);
   const { branch } = row;
   const badge = prBadge(branch.pr);
-  const bg = selected ? colors.selectedBg : undefined;
+  const bg = selectionBg(selected, focused);
   // Gray text is low-contrast on the blue selection bg; brighten it when selected.
   const lit = (c?: string) =>
     selected && c === "gray" ? colors.selectedDim : c;
