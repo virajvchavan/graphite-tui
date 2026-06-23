@@ -25,7 +25,7 @@ import { getWorkingStatus } from "../data/status.js";
 import { getBranchFileDiff, getWorktreeFileDiff } from "../data/diff.js";
 import { fetchPrStatus } from "../data/comments.js";
 import { buildRenderRows } from "../model/tree.js";
-import { watchRepo } from "../data/watch.js";
+import { watchRepo, watchWorkingTree } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
 import * as commandLog from "../actions/commandLog.js";
 import { centeredOffset, keepVisibleOffset } from "./scroll.js";
@@ -309,15 +309,20 @@ export function App({ initial, paths }: Props) {
     reloadStatus();
   }, [reloadStatus]);
 
-  // 60s poll backstop: working-tree edits made in an external editor don't
-  // touch any watched file, so without this they'd only surface on focus-in or
-  // a manual refresh. Skip while a command is running to avoid racing it.
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (!busy) reloadStatus();
-    }, 60_000);
-    return () => clearInterval(id);
-  }, [busy, reloadStatus]);
+  // Working-tree edits made in an external editor don't touch any git metadata,
+  // so watchRepo won't see them. Watch the working tree itself and refresh on
+  // change (watchWorkingTree owns its own poll fallback where recursive watch
+  // is unavailable). `busy` is read through a ref so toggling it doesn't tear
+  // down and rebuild the watcher; the check also gates the fallback poll.
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  useEffect(
+    () =>
+      watchWorkingTree(data.repoRoot, () => {
+        if (!busyRef.current) reloadStatus();
+      }),
+    [data.repoRoot, reloadStatus]
+  );
 
   // Keep the working-tree cursor in range as files come and go.
   useEffect(() => {
