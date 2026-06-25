@@ -1,6 +1,6 @@
 import { execa } from "execa";
 import { getRemoteOwnerRepo } from "./git.js";
-import type { CiStatus, PrLiveStatus } from "../types.js";
+import type { CiStatus, Mergeable, PrLiveStatus } from "../types.js";
 
 /** Map GitHub's StatusState enum to our coarse CI status. */
 export function mapCiState(state: unknown): CiStatus {
@@ -16,6 +16,15 @@ export function mapCiState(state: unknown): CiStatus {
     default:
       return null; // no checks configured / unknown
   }
+}
+
+/** Map GitHub's MergeableState enum (MERGEABLE | CONFLICTING | UNKNOWN). */
+export function mapMergeable(state: unknown): Mergeable {
+  return state === "CONFLICTING"
+    ? "conflicting"
+    : state === "MERGEABLE"
+      ? "mergeable"
+      : "unknown"; // UNKNOWN (still computing) / unmapped
 }
 
 /**
@@ -40,6 +49,7 @@ export async function fetchPrStatus(
     .map(
       (n) =>
         `p${n}: pullRequest(number: ${n}) { ` +
+        `mergeable ` +
         `reviewThreads(first: 100) { nodes { isResolved } } ` +
         `commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }`
     )
@@ -77,7 +87,8 @@ export async function fetchPrStatus(
       const ci = mapCiState(
         pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state
       );
-      result.set(n, { threads, ci });
+      const mergeable = mapMergeable(pr.mergeable);
+      result.set(n, { threads, ci, mergeable });
     }
   } catch {
     /* gh missing / not authed / offline / not a GitHub remote -> show nothing */

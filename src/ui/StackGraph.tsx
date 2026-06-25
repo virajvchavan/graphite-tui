@@ -82,6 +82,10 @@ export function StackGraph({
             ageW={ageW}
             ciW={ciW}
             conflicted={conflictedBranches.has(row.branch.name)}
+            mergeConflict={
+              row.branch.pr?.state === "OPEN" &&
+              status?.mergeable === "conflicting"
+            }
             threadCounts={status?.threads}
             ci={status?.ci}
           />

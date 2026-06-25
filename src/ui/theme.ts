@@ -22,6 +22,7 @@ export interface Palette {
   reviewRequired: string;
   needsRestack: string;
   conflict: string;
+  mergeConflict: string;
   ahead: string;
   behind: string;
   upstreamGone: string;
@@ -79,6 +80,7 @@ export const darkColors: Palette = {
   reviewRequired: "yellow",
   needsRestack: "yellow",
   conflict: "red",
+  mergeConflict: "red",
   ahead: "green",
   behind: "magenta",
   upstreamGone: "red",

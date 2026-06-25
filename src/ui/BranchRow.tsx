@@ -21,6 +21,8 @@ interface Props {
   ciW: number;
   /** True when restacking this branch is predicted to conflict. */
   conflicted?: boolean;
+  /** True when GitHub reports this branch's PR as conflicting with its base. */
+  mergeConflict?: boolean;
   /** Resolved/total review threads for this branch's PR, if fetched. */
   threadCounts?: ReviewThreadCounts;
   /** Rolled-up CI status for this branch's PR, if fetched. */
@@ -57,6 +59,7 @@ export function BranchRow({
   ageW,
   ciW,
   conflicted,
+  mergeConflict,
   threadCounts,
   ci,
 }: Props) {
@@ -93,6 +96,8 @@ export function BranchRow({
   }
   if (conflicted) {
     meta.push({ text: " ⚠ conflict", color: colors.conflict, bold: true });
+  } else if (mergeConflict) {
+    meta.push({ text: " ⊗ conflicts", color: colors.mergeConflict, bold: true });
   } else if (branch.needsRestack) {
     meta.push({ text: " ⇈ restack", color: colors.needsRestack, bold: true });
   }

@@ -40,12 +40,20 @@ export interface ReviewThreadCounts {
 export type CiStatus = "passed" | "failed" | "pending" | null;
 
 /**
+ * Whether a PR can be merged into its base, per GitHub's `mergeable` field.
+ * `"unknown"` covers GitHub's UNKNOWN (still computing) and any unmapped value.
+ */
+export type Mergeable = "mergeable" | "conflicting" | "unknown";
+
+/**
  * Live PR data fetched best-effort from GitHub (not in Graphite's cache),
- * keyed by PR number. Both fields come from a single batched `gh` query.
+ * keyed by PR number. All fields come from a single batched `gh` query.
  */
 export interface PrLiveStatus {
   threads: ReviewThreadCounts;
   ci: CiStatus;
+  /** GitHub merge-conflict state against the PR's base branch. */
+  mergeable: Mergeable;
 }
 
 /** Entry from `.graphite_pr_info`, keyed by headRefName. */
