@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   changedFilesKey,
+  focusAbove,
+  focusBelow,
   nextFocus,
   normalHint,
   prNumbersOf,
@@ -119,6 +121,54 @@ describe("nextFocus", () => {
 
   it("wraps around past hidden trailing panels back to branches", () => {
     expect(nextFocus("files", { worktree: true, files: true, logs: false })).toBe(
+      "branches"
+    );
+  });
+});
+
+describe("focusBelow", () => {
+  const all = { worktree: true, files: true, logs: true };
+
+  it("walks down the on-screen order without wrapping", () => {
+    expect(focusBelow("branches", all)).toBe("worktree");
+    expect(focusBelow("worktree", all)).toBe("files");
+    expect(focusBelow("files", all)).toBe("logs");
+    // logs is the bottom-most panel -> nothing below it
+    expect(focusBelow("logs", all)).toBeNull();
+  });
+
+  it("skips hidden panels", () => {
+    expect(focusBelow("branches", { worktree: false, files: true, logs: false })).toBe(
+      "files"
+    );
+    expect(focusBelow("branches", { worktree: false, files: false, logs: true })).toBe(
+      "logs"
+    );
+  });
+
+  it("returns null when no visible panel is below", () => {
+    const none = { worktree: false, files: false, logs: false };
+    expect(focusBelow("branches", none)).toBeNull();
+    expect(focusBelow("files", { worktree: true, files: true, logs: false })).toBeNull();
+  });
+});
+
+describe("focusAbove", () => {
+  const all = { worktree: true, files: true, logs: true };
+
+  it("walks up the on-screen order without wrapping", () => {
+    expect(focusAbove("logs", all)).toBe("files");
+    expect(focusAbove("files", all)).toBe("worktree");
+    expect(focusAbove("worktree", all)).toBe("branches");
+    // branches is the top-most panel -> nothing above it
+    expect(focusAbove("branches", all)).toBeNull();
+  });
+
+  it("skips hidden panels", () => {
+    expect(focusAbove("logs", { worktree: false, files: false, logs: true })).toBe(
+      "branches"
+    );
+    expect(focusAbove("files", { worktree: false, files: true, logs: false })).toBe(
       "branches"
     );
   });

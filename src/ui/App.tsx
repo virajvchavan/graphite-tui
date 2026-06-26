@@ -44,6 +44,8 @@ import type { DetailLine } from "./Modal.js";
 import { applyTheme, colors, getThemeMode, prBadge } from "./theme.js";
 import {
   changedFilesKey,
+  focusAbove,
+  focusBelow,
   type Focus,
   nextFocus,
   normalHint,
@@ -714,6 +716,31 @@ export function App({ initial, paths }: Props) {
     };
     const goFocus = (f: Focus) => (f === "logs" ? focusLogs() : setFocus(f));
 
+    // Cross into a neighbouring panel via the arrow keys, treating all visible
+    // panels as one continuous list: descending (`fromTop`) lands on its first
+    // row, ascending lands on its last row.
+    const enterFocus = (f: Focus, fromTop: boolean) => {
+      if (f === "branches") {
+        setSelected(fromTop ? 0 : Math.max(0, rows.length - 1));
+        setFocus("branches");
+      } else if (f === "worktree") {
+        setWorktreeCursor(fromTop ? 0 : Math.max(0, worktree.length - 1));
+        setFocus("worktree");
+      } else if (f === "files") {
+        setFileCursor(fromTop ? 0 : Math.max(0, files.length - 1));
+        setFocus("files");
+      } else if (fromTop) {
+        // logs is the bottom-most panel, so arrow-crossing only ever enters it
+        // from above — landing on the first line.
+        setLogCursor(0);
+        setLogScroll(0);
+        setFocus("logs");
+      } else {
+        // Entering from below tails the newest line, same as Tab/`goFocus`.
+        focusLogs();
+      }
+    };
+
     // Repo-wide actions available from every panel, not just the branch list.
     if (input === "?") {
       setHelpScroll(0);
@@ -747,9 +774,14 @@ export function App({ initial, paths }: Props) {
           setMode("diff");
         }
       } else if (key.upArrow || input === "k") {
-        setWorktreeCursor((c) => Math.max(0, c - 1));
+        const above = focusAbove("worktree", shownPanels);
+        if (key.upArrow && worktreeCursor === 0 && above) enterFocus(above, false);
+        else setWorktreeCursor((c) => Math.max(0, c - 1));
       } else if (key.downArrow || input === "j") {
-        setWorktreeCursor((c) => Math.min(worktree.length - 1, c + 1));
+        const below = focusBelow("worktree", shownPanels);
+        if (key.downArrow && worktreeCursor >= worktree.length - 1 && below)
+          enterFocus(below, true);
+        else setWorktreeCursor((c) => Math.min(worktree.length - 1, c + 1));
       } else if (input === "a") {
         if (wf)
           runAction(`staging ${baseName(wf.path)}`, () =>
@@ -893,9 +925,14 @@ export function App({ initial, paths }: Props) {
         // auto behavior in whichever direction is opposite the current state).
         setFilesCollapseOverride(!filesCollapsedRef.current);
       } else if (key.upArrow || input === "k") {
-        setFileCursor((c) => Math.max(0, c - 1));
+        const above = focusAbove("files", shownPanels);
+        if (key.upArrow && fileCursor === 0 && above) enterFocus(above, false);
+        else setFileCursor((c) => Math.max(0, c - 1));
       } else if (key.downArrow || input === "j") {
-        setFileCursor((c) => Math.min(files.length - 1, c + 1));
+        const below = focusBelow("files", shownPanels);
+        if (key.downArrow && fileCursor >= files.length - 1 && below)
+          enterFocus(below, true);
+        else setFileCursor((c) => Math.min(files.length - 1, c + 1));
       }
       return;
     }
@@ -935,6 +972,11 @@ export function App({ initial, paths }: Props) {
           }
         }
       } else if (key.upArrow || input === "k") {
+        const above = focusAbove("logs", shownPanels);
+        if (key.upArrow && logCursor === 0 && above) {
+          enterFocus(above, false);
+          return;
+        }
         setLogCursor((c) => {
           const next = Math.max(0, c - 1);
           // Scroll up only if the cursor moved above the window's top.
@@ -942,6 +984,7 @@ export function App({ initial, paths }: Props) {
           return next;
         });
       } else if (key.downArrow || input === "j") {
+        // logs is the bottom-most panel — there's nothing to cross down into.
         setLogCursor((c) => {
           const next = Math.min(logLinesRef.current.length - 1, c + 1);
           // Scroll down only if the cursor moved below the window's bottom.
@@ -960,9 +1003,13 @@ export function App({ initial, paths }: Props) {
     if (key.tab) {
       goFocus(nextFocus("branches", shownPanels));
     } else if (key.upArrow || input === "k") {
+      // branches is the top-most panel — there's nothing to cross up into.
       setSelected((s) => Math.max(0, s - 1));
     } else if (key.downArrow || input === "j") {
-      setSelected((s) => Math.min(rows.length - 1, s + 1));
+      const below = focusBelow("branches", shownPanels);
+      if (key.downArrow && selected >= rows.length - 1 && below)
+        enterFocus(below, true);
+      else setSelected((s) => Math.min(rows.length - 1, s + 1));
     } else if (key.return || input === "c") {
       if (selectedRow) {
         const name = selectedRow.branch.name;

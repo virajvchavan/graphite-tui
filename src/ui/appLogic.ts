@@ -55,26 +55,61 @@ export function worktreeHint(
   return hint;
 }
 
+type PanelVisibility = { worktree: boolean; files: boolean; logs: boolean };
+
+// The fixed top-to-bottom order panels appear on screen. Tab cycling wraps
+// through this; arrow-key crossing walks it linearly without wrapping.
+const FOCUS_ORDER: Focus[] = ["branches", "worktree", "files", "logs"];
+
+const isFocusShown = (f: Focus, shown: PanelVisibility) =>
+  f === "branches" ||
+  (f === "worktree" && shown.worktree) ||
+  (f === "files" && shown.files) ||
+  (f === "logs" && shown.logs);
+
 /**
  * Next focusable panel in the cycle branches → worktree → files → logs →
  * branches, skipping any panel that isn't currently shown.
  */
-export function nextFocus(
-  current: Focus,
-  shown: { worktree: boolean; files: boolean; logs: boolean }
-): Focus {
-  const order: Focus[] = ["branches", "worktree", "files", "logs"];
-  const isShown = (f: Focus) =>
-    f === "branches" ||
-    (f === "worktree" && shown.worktree) ||
-    (f === "files" && shown.files) ||
-    (f === "logs" && shown.logs);
-  const start = order.indexOf(current);
-  for (let i = 1; i <= order.length; i++) {
-    const cand = order[(start + i) % order.length];
-    if (isShown(cand)) return cand;
+export function nextFocus(current: Focus, shown: PanelVisibility): Focus {
+  const start = FOCUS_ORDER.indexOf(current);
+  for (let i = 1; i <= FOCUS_ORDER.length; i++) {
+    const cand = FOCUS_ORDER[(start + i) % FOCUS_ORDER.length];
+    if (isFocusShown(cand, shown)) return cand;
   }
   return "branches";
+}
+
+/**
+ * The shown panel directly below `current` in the on-screen order, or null if
+ * `current` is the last visible panel. Used to cross sections when the down
+ * arrow is pressed at the bottom of a list — no wrap-around, unlike Tab.
+ */
+export function focusBelow(
+  current: Focus,
+  shown: PanelVisibility
+): Focus | null {
+  const start = FOCUS_ORDER.indexOf(current);
+  for (let i = start + 1; i < FOCUS_ORDER.length; i++) {
+    if (isFocusShown(FOCUS_ORDER[i], shown)) return FOCUS_ORDER[i];
+  }
+  return null;
+}
+
+/**
+ * The shown panel directly above `current`, or null if `current` is already the
+ * topmost visible panel. Used to cross sections when the up arrow is pressed at
+ * the top of a list.
+ */
+export function focusAbove(
+  current: Focus,
+  shown: PanelVisibility
+): Focus | null {
+  const start = FOCUS_ORDER.indexOf(current);
+  for (let i = start - 1; i >= 0; i--) {
+    if (isFocusShown(FOCUS_ORDER[i], shown)) return FOCUS_ORDER[i];
+  }
+  return null;
 }
 
 /**
