@@ -125,8 +125,16 @@ export const sync = (repoRoot: string) =>
 export const restack = (repoRoot: string) =>
   runGt(repoRoot, ["restack"], "Restacked");
 
-export const submitStack = (repoRoot: string) =>
-  runGt(repoRoot, ["submit", "--stack"], "Submitted stack");
+/**
+ * Submit the stack containing `branch`. `--branch` runs the submit as if from
+ * that branch without checking it out, so this leaves no checkout side effect.
+ */
+export const submitBranch = (repoRoot: string, branch: string) =>
+  runGt(
+    repoRoot,
+    ["submit", "--stack", "--branch", branch],
+    `Submitted ${branch}`
+  );
 
 export const deleteBranch = (repoRoot: string, branch: string) =>
   runGt(repoRoot, ["delete", branch, "--force"], `Deleted ${branch}`);

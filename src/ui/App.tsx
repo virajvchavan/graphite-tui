@@ -1000,7 +1000,12 @@ export function App({ initial, paths }: Props) {
     } else if (input === "r") {
       runAction("restacking", () => gt.restack(data.repoRoot));
     } else if (input === "S") {
-      runAction("submitting stack", () => gt.submitStack(data.repoRoot));
+      if (selectedRow && !selectedRow.branch.isTrunk) {
+        const name = selectedRow.branch.name;
+        runAction(`submitting ${name}`, () =>
+          gt.submitBranch(data.repoRoot, name)
+        );
+      }
     } else if (input === "d") {
       if (selectedRow && !selectedRow.branch.isTrunk) {
         const b = selectedRow.branch;
