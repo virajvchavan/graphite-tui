@@ -294,12 +294,23 @@ export function App({ initial, paths }: Props) {
     setWorktree(files);
   }, [data.repoRoot]);
 
+  // `busy` (a gt action running in-process) is read through a ref so toggling it
+  // doesn't tear down and rebuild the watchers below; it gates their callbacks.
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+
   // Live auto-refresh from gt activity in other terminals. The watcher fires on
   // Graphite metadata, HEAD, and .git/index changes — the last picks up staging
   // done elsewhere — so reload both the repo data and the working-tree status.
+  // Skip while a gt action is in-flight: a command like `gt sync` rewrites the
+  // metadata DB several times (checkout/restack/delete) and each intermediate
+  // write would otherwise reload a half-rebuilt, broken-looking tree. runAction
+  // does its own reload() at completion, so the final consistent state still
+  // lands.
   useEffect(
     () =>
       watchRepo(paths, () => {
+        if (busyRef.current) return;
         reload();
         reloadStatus();
       }),
@@ -314,10 +325,7 @@ export function App({ initial, paths }: Props) {
   // Working-tree edits made in an external editor don't touch any git metadata,
   // so watchRepo won't see them. Watch the working tree itself and refresh on
   // change (watchWorkingTree owns its own poll fallback where recursive watch
-  // is unavailable). `busy` is read through a ref so toggling it doesn't tear
-  // down and rebuild the watcher; the check also gates the fallback poll.
-  const busyRef = useRef(busy);
-  busyRef.current = busy;
+  // is unavailable). The check also gates the fallback poll.
   useEffect(
     () =>
       watchWorkingTree(data.repoRoot, () => {
