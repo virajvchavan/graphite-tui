@@ -1071,7 +1071,7 @@ export function App({ initial, paths }: Props) {
             label: "Pull request",
             value: `#${b.pr.prNumber}  ${b.pr.title}`,
           });
-          const badge = prBadge(b.pr);
+          const badge = prBadge(b.pr, prStatus.get(b.pr.prNumber));
           if (badge)
             delDetails.push({
               label: "PR status",

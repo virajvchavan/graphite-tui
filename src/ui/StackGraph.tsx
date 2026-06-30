@@ -53,7 +53,10 @@ export function StackGraph({
   let ciW = 0;
   for (const { branch } of rows) {
     if (branch.pr) prW = Math.max(prW, `#${branch.pr.prNumber}`.length);
-    const b = prBadge(branch.pr);
+    const b = prBadge(
+      branch.pr,
+      branch.pr ? prStatus.get(branch.pr.prNumber) : undefined
+    );
     if (b) statusW = Math.max(statusW, b.text.length);
     if (branch.age) ageW = Math.max(ageW, branch.age.length);
     if (branch.pr && prStatus.get(branch.pr.prNumber)?.ci) ciW = 1;
@@ -83,11 +86,12 @@ export function StackGraph({
             ciW={ciW}
             conflicted={conflictedBranches.has(row.branch.name)}
             mergeConflict={
-              row.branch.pr?.state === "OPEN" &&
+              (status?.state ?? row.branch.pr?.state) === "OPEN" &&
               status?.mergeable === "conflicting"
             }
             threadCounts={status?.threads}
             ci={status?.ci}
+            live={status}
           />
         );
       })}

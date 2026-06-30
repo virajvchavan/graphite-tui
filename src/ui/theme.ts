@@ -1,4 +1,4 @@
-import type { CiStatus, PrInfo } from "../types.js";
+import type { CiStatus, PrInfo, PrLiveStatus } from "../types.js";
 
 export type ThemeMode = "light" | "dark";
 
@@ -219,15 +219,24 @@ export function worktreeStatusColor(ch: string): string {
   }
 }
 
-/** Short colored badge text for a PR's status. Returns null when no PR. */
+/**
+ * Short colored badge text for a PR's status. Returns null when no PR.
+ *
+ * Graphite's cached `.graphite_pr_info` only updates on `gt` activity, so when
+ * a live GitHub status is available it takes precedence — letting a refresh
+ * surface a merge or approval that happened elsewhere.
+ */
 export function prBadge(
-  pr: PrInfo | null
+  pr: PrInfo | null,
+  live?: PrLiveStatus
 ): { text: string; color: string } | null {
   if (!pr) return null;
-  if (pr.state === "MERGED") return { text: "merged", color: colors.merged };
-  if (pr.state === "CLOSED") return { text: "closed", color: colors.closed };
+  const state = live ? live.state : pr.state;
+  const reviewDecision = live ? live.reviewDecision : pr.reviewDecision;
+  if (state === "MERGED") return { text: "merged", color: colors.merged };
+  if (state === "CLOSED") return { text: "closed", color: colors.closed };
   if (pr.isDraft) return { text: "draft", color: colors.draft };
-  switch (pr.reviewDecision) {
+  switch (reviewDecision) {
     case "APPROVED":
       return { text: "approved", color: colors.approved };
     case "CHANGES_REQUESTED":

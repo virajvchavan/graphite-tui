@@ -1,5 +1,6 @@
 import { execa } from "execa";
 import { getRemoteOwnerRepo } from "./git.js";
+import { normalizeReview, normalizeState } from "./prInfo.js";
 import type { CiStatus, Mergeable, PrLiveStatus } from "../types.js";
 
 /** Map GitHub's StatusState enum to our coarse CI status. */
@@ -33,7 +34,9 @@ export function mapMergeable(state: unknown): Mergeable {
  * returns an empty map (never throws) when `gh` is missing, unauthenticated,
  * offline, or the remote isn't on GitHub. Threads are capped at the first 100
  * per PR (plenty in practice). CI status is read from the last commit's
- * statusCheckRollup.
+ * statusCheckRollup. Also pulls live `state`/`reviewDecision` so a refresh can
+ * show a PR merged or approved elsewhere without waiting for `gt` to rewrite
+ * its `.graphite_pr_info` cache.
  */
 export async function fetchPrStatus(
   repoRoot: string,
@@ -49,7 +52,7 @@ export async function fetchPrStatus(
     .map(
       (n) =>
         `p${n}: pullRequest(number: ${n}) { ` +
-        `mergeable ` +
+        `state reviewDecision mergeable ` +
         `reviewThreads(first: 100) { nodes { isResolved } } ` +
         `commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }`
     )
@@ -88,7 +91,9 @@ export async function fetchPrStatus(
         pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state
       );
       const mergeable = mapMergeable(pr.mergeable);
-      result.set(n, { threads, ci, mergeable });
+      const state = normalizeState(pr.state);
+      const reviewDecision = normalizeReview(pr.reviewDecision);
+      result.set(n, { threads, ci, mergeable, state, reviewDecision });
     }
   } catch {
     /* gh missing / not authed / offline / not a GitHub remote -> show nothing */

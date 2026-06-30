@@ -1,6 +1,11 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { CiStatus, RenderRow, ReviewThreadCounts } from "../types.js";
+import type {
+  CiStatus,
+  PrLiveStatus,
+  RenderRow,
+  ReviewThreadCounts,
+} from "../types.js";
 import { buildGutter } from "./graph.js";
 import { ciBadge, colors, prBadge, selectionBg } from "./theme.js";
 
@@ -27,6 +32,8 @@ interface Props {
   threadCounts?: ReviewThreadCounts;
   /** Rolled-up CI status for this branch's PR, if fetched. */
   ci?: CiStatus;
+  /** Live GitHub status for this branch's PR; overrides the stale cache. */
+  live?: PrLiveStatus;
 }
 
 interface Segment {
@@ -62,10 +69,11 @@ export function BranchRow({
   mergeConflict,
   threadCounts,
   ci,
+  live,
 }: Props) {
   const cells = buildGutter(row, columnCount);
   const { branch } = row;
-  const badge = prBadge(branch.pr);
+  const badge = prBadge(branch.pr, live);
   const bg = selectionBg(selected, focused);
   // Gray text is low-contrast on the blue selection bg; brighten it when selected.
   const lit = (c?: string) =>
@@ -115,7 +123,7 @@ export function BranchRow({
   // remaining columns stay aligned (e.g. the trunk row has no PR or status).
   if (ciW > 0) {
     // Only show CI for live (open/draft) PRs; merged/closed get a blank cell.
-    const open = branch.pr && branch.pr.state === "OPEN";
+    const open = branch.pr && (live ? live.state : branch.pr.state) === "OPEN";
     const badge = open ? ciBadge(ci ?? null) : null;
     meta.push({
       text: ` ${(badge?.text ?? "").padEnd(ciW)}`,

@@ -9,7 +9,7 @@ import {
   selectionBg,
   worktreeStatusColor,
 } from "./theme.js";
-import type { PrInfo } from "../types.js";
+import type { PrInfo, PrLiveStatus } from "../types.js";
 
 // Tests assume the default dark palette; reset after any applyTheme call so
 // the live `colors` binding doesn't leak into other tests.
@@ -23,6 +23,17 @@ function pr(over: Partial<PrInfo>): PrInfo {
     url: "u",
     headRefName: "h",
     baseRefName: "b",
+    ...over,
+  };
+}
+
+function live(over: Partial<PrLiveStatus>): PrLiveStatus {
+  return {
+    threads: { total: 0, resolved: 0 },
+    ci: null,
+    mergeable: "unknown",
+    state: "OPEN",
+    reviewDecision: null,
     ...over,
   };
 }
@@ -118,6 +129,24 @@ describe("prBadge", () => {
       text: "open",
       color: colors.dim,
     });
+  });
+
+  it("prefers live GitHub status over the stale cache", () => {
+    // Cache still says approved/open, but GitHub reports it merged.
+    expect(
+      prBadge(
+        pr({ state: "OPEN", reviewDecision: "APPROVED" }),
+        live({ state: "MERGED" })
+      )
+    ).toEqual({ text: "merged", color: colors.merged });
+
+    // Cache says approved, but the approval was dismissed on GitHub.
+    expect(
+      prBadge(
+        pr({ reviewDecision: "APPROVED" }),
+        live({ reviewDecision: "REVIEW_REQUIRED" })
+      )
+    ).toEqual({ text: "review", color: colors.reviewRequired });
   });
 });
 
