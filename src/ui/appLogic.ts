@@ -2,7 +2,7 @@
 // rendering the component. These hold no React state — they map inputs
 // (selection, panel visibility, repo data) to hint rows, focus targets, and
 // cache keys.
-import type { Branch, RepoData } from "../types.js";
+import type { Branch, PrInfo, RepoData } from "../types.js";
 
 /** Which panel currently has keyboard focus. */
 export type Focus = "branches" | "files" | "worktree" | "logs";
@@ -144,4 +144,50 @@ export function prNumbersOf(repo: RepoData): number[] {
   const ns: number[] = [];
   for (const b of repo.branches.values()) if (b.pr) ns.push(b.pr.prNumber);
   return ns;
+}
+
+/**
+ * GitHub PR-discovery bookkeeping, keyed by branch name: a `PrInfo` value is a
+ * PR found on GitHub for a branch gt hadn't cached; `null` records a branch we
+ * looked up and found no PR (so it isn't re-queried). Any key present means
+ * "already queried".
+ */
+export type DiscoveredPrs = Map<string, PrInfo | null>;
+
+/**
+ * Merge discovered PRs into a freshly loaded RepoData, mutating in place. Only
+ * fills branches that lack a PR — gt's cached `.graphite_pr_info` stays
+ * authoritative wherever it has an entry; `null` entries (no PR found) are
+ * skipped. Mirrors loadRepoData's own `displayTitle` rule so a discovered PR
+ * reads identically.
+ */
+export function applyDiscoveredPrs(repo: RepoData, discovered: DiscoveredPrs): void {
+  for (const [name, pr] of discovered) {
+    if (!pr) continue;
+    const b = repo.branches.get(name);
+    if (b && !b.pr) {
+      b.pr = pr;
+      b.displayTitle = pr.title;
+    }
+  }
+}
+
+/**
+ * Non-trunk branches with no PR that haven't been looked up on GitHub yet — the
+ * candidates for {@link applyDiscoveredPrs}. Takes the *visible* branches (the
+ * rendered rows), not the whole model, so we don't query GitHub for the many
+ * stale/unreachable local branches gt keeps in its cache but never shows.
+ * `queried` is anything with a membership test (a {@link DiscoveredPrs} map or a
+ * Set of names). Kept as a stable, sorted key so a discovery effect only
+ * re-fires when the candidate set actually changes.
+ */
+export function undiscoveredPrKey(
+  branches: Branch[],
+  queried: { has(name: string): boolean }
+): string {
+  const names: string[] = [];
+  for (const b of branches) {
+    if (!b.isTrunk && !b.pr && !queried.has(b.name)) names.push(b.name);
+  }
+  return names.sort().join("\n");
 }

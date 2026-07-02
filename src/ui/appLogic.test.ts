@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyDiscoveredPrs,
   changedFilesKey,
+  type DiscoveredPrs,
   focusAbove,
   focusBelow,
   nextFocus,
   normalHint,
   prNumbersOf,
+  undiscoveredPrKey,
   worktreeHint,
 } from "./appLogic.js";
 import type { Branch, PrInfo, RepoData } from "../types.js";
@@ -226,5 +229,74 @@ describe("prNumbersOf", () => {
 
   it("returns an empty array when no branch has a PR", () => {
     expect(prNumbersOf(repo([b({ name: "a" })]))).toEqual([]);
+  });
+});
+
+describe("applyDiscoveredPrs", () => {
+  const discovered = (entries: [string, PrInfo | null][]): DiscoveredPrs =>
+    new Map(entries);
+
+  it("fills a branch that has no PR and sets its display title", () => {
+    const r = repo([b({ name: "a" })]);
+    applyDiscoveredPrs(r, discovered([["a", { ...pr(42), title: "My PR" }]]));
+    const a = r.branches.get("a")!;
+    expect(a.pr?.prNumber).toBe(42);
+    expect(a.displayTitle).toBe("My PR");
+  });
+
+  it("never overwrites a PR already present from gt's cache", () => {
+    const r = repo([b({ name: "a", pr: pr(1), displayTitle: "cached" })]);
+    applyDiscoveredPrs(r, discovered([["a", pr(99)]]));
+    const a = r.branches.get("a")!;
+    expect(a.pr?.prNumber).toBe(1);
+    expect(a.displayTitle).toBe("cached");
+  });
+
+  it("skips null entries (branches queried with no PR found)", () => {
+    const r = repo([b({ name: "a" })]);
+    applyDiscoveredPrs(r, discovered([["a", null]]));
+    expect(r.branches.get("a")!.pr).toBeNull();
+  });
+
+  it("ignores discovered entries for branches not in the model", () => {
+    const r = repo([b({ name: "a" })]);
+    applyDiscoveredPrs(r, discovered([["ghost", pr(7)]]));
+    expect(r.branches.has("ghost")).toBe(false);
+  });
+});
+
+describe("undiscoveredPrKey", () => {
+  it("lists non-trunk, PR-less, not-yet-queried branches, sorted", () => {
+    const branches = [
+      b({ name: "develop", isTrunk: true }),
+      b({ name: "c" }),
+      b({ name: "a" }),
+      b({ name: "withpr", pr: pr(1) }),
+    ];
+    expect(undiscoveredPrKey(branches, new Set())).toBe("a\nc");
+  });
+
+  it("excludes branches already queried", () => {
+    expect(
+      undiscoveredPrKey([b({ name: "a" }), b({ name: "b" })], new Set(["a"]))
+    ).toBe("b");
+  });
+
+  it("is empty when every branch is trunk, has a PR, or was queried", () => {
+    const branches = [
+      b({ name: "develop", isTrunk: true }),
+      b({ name: "withpr", pr: pr(1) }),
+      b({ name: "done" }),
+    ];
+    expect(undiscoveredPrKey(branches, new Set(["done"]))).toBe("");
+  });
+
+  it("treats a DiscoveredPrs map as the queried set (found or null both count)", () => {
+    const queried: DiscoveredPrs = new Map([
+      ["found", pr(5)],
+      ["nopr", null],
+    ]);
+    const branches = [b({ name: "found" }), b({ name: "nopr" }), b({ name: "fresh" })];
+    expect(undiscoveredPrKey(branches, queried)).toBe("fresh");
   });
 });

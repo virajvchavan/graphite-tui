@@ -171,27 +171,6 @@ export async function openUrl(url: string): Promise<ActionResult> {
   }
 }
 
-/** Open the PR (or stack) page in the browser. Fire-and-forget. */
-export async function openPr(
-  repoRoot: string,
-  branch: string,
-  stack = false
-): Promise<ActionResult> {
-  try {
-    const args = stack ? ["pr", branch, "--stack"] : ["pr", branch];
-    // gt pr opens a browser; keep it detached and don't wait on interactivity.
-    await execLogged(
-      `gt ${args.join(" ")}`,
-      "gt",
-      [...args, "--cwd", repoRoot],
-      { timeout: 8000 }
-    );
-    return { ok: true, message: stack ? "Opened stack" : "Opened PR" };
-  } catch (err: unknown) {
-    return failure(err);
-  }
-}
-
 // --- working-tree actions ---
 
 const base = (p: string) => p.split("/").pop() || p;

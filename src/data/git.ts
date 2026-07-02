@@ -47,6 +47,24 @@ export function getRemoteOwnerRepo(
   return m ? { owner: m[1], name: m[2] } : null;
 }
 
+/**
+ * Graphite web URL for a PR — its PR page, or the stack page with `stack:true`.
+ * Built from the origin owner/repo + PR number (mirroring what `gt pr` opens),
+ * so it works even for PRs gt hasn't cached locally, e.g. ones discovered from
+ * GitHub — `gt pr` itself errors ("No PR found") on those. Null when the remote
+ * isn't a parseable GitHub owner/repo.
+ */
+export function graphitePrUrl(
+  repoRoot: string,
+  prNumber: number,
+  stack = false
+): string | null {
+  const repo = getRemoteOwnerRepo(repoRoot);
+  if (!repo) return null;
+  const path = stack ? "submit" : "github/pr";
+  return `https://app.graphite.com/${path}/${repo.owner}/${repo.name}/${prNumber}`;
+}
+
 /** Current checked-out branch, or null if detached HEAD. */
 export function getCurrentBranch(repoRoot: string): string | null {
   try {

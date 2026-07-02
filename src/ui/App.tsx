@@ -19,11 +19,11 @@ import type {
 import type { WorkingFile } from "../data/status.js";
 import type { RepoPaths } from "../data/repo.js";
 import { loadRepoData } from "../data/load.js";
-import { githubPrUrl } from "../data/git.js";
+import { githubPrUrl, graphitePrUrl } from "../data/git.js";
 import { getChangedFiles } from "../data/files.js";
 import { getWorkingStatus } from "../data/status.js";
 import { getBranchFileDiff, getWorktreeFileDiff } from "../data/diff.js";
-import { fetchPrStatus } from "../data/comments.js";
+import { fetchPrStatus, fetchPrsByBranch } from "../data/comments.js";
 import { buildRenderRows } from "../model/tree.js";
 import { watchRepo, watchWorkingTree } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
@@ -43,13 +43,16 @@ import { DiffOverlay, diffVisibleRows } from "./DiffOverlay.js";
 import type { DetailLine } from "./Modal.js";
 import { applyTheme, colors, getThemeMode, prBadge } from "./theme.js";
 import {
+  applyDiscoveredPrs,
   changedFilesKey,
+  type DiscoveredPrs,
   focusAbove,
   focusBelow,
   type Focus,
   nextFocus,
   normalHint,
   prNumbersOf,
+  undiscoveredPrKey,
   worktreeHint,
 } from "./appLogic.js";
 
@@ -272,9 +275,18 @@ export function App({ initial, paths }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // GitHub PR-discovery bookkeeping for branches gt hasn't cached (see
+  // DiscoveredPrs): a PrInfo value is a found PR, null records "looked up, none
+  // found" so it isn't re-queried. A ref, not state — it's applied inside
+  // reload() and never needs to trigger a render on its own.
+  const discoveredPrs = useRef<DiscoveredPrs>(new Map());
+
   const reload = useCallback((): RepoData | null => {
     try {
       const { data: fresh } = loadRepoData(data.repoRoot);
+      // Layer any GitHub-discovered PRs back on top of the fresh cache read
+      // (gt's cache stays authoritative where it has an entry).
+      applyDiscoveredPrs(fresh, discoveredPrs.current);
       // The files cache is keyed by branch+parent revision (see
       // changedFilesKey), so it's self-invalidating — clearing it here would
       // make the selected branch's diff flicker (loading→repopulate) on every
@@ -508,6 +520,35 @@ export function App({ initial, paths }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prNumberKey, data.repoRoot]);
 
+  // Discover PRs from GitHub for tracked branches gt hasn't cached (e.g. a
+  // freshly `gt track`ed branch whose PR only exists on GitHub). Only branches
+  // with no PR and not yet looked up are queried; a found PR is merged in via
+  // reload() and then flows through the by-number status fetch above.
+  const undiscoveredKey = useMemo(
+    () => undiscoveredPrKey(allRows.map((r) => r.branch), discoveredPrs.current),
+    // Driven by the rendered rows so only visible branches are queried;
+    // discoveredPrs is a ref, already reflecting the previous round's lookups by
+    // the time allRows changes.
+    [allRows]
+  );
+
+  useEffect(() => {
+    if (!undiscoveredKey) return;
+    const names = undiscoveredKey.split("\n");
+    // Mark every branch queried up front (null = looked up) so the same names
+    // aren't re-fetched if allRows shifts mid-flight; found PRs overwrite below.
+    for (const n of names) discoveredPrs.current.set(n, null);
+    (async () => {
+      const found = await fetchPrsByBranch(data.repoRoot, names);
+      if (found.size === 0) return;
+      for (const [name, pr] of found) discoveredPrs.current.set(name, pr);
+      // discoveredPrs is a ref that outlives this render and reload() re-reads
+      // fresh data, so applying a late result is always safe.
+      reload();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undiscoveredKey, data.repoRoot]);
+
   // Enable terminal focus reporting so we learn when this window/tab regains
   // focus. The terminal then emits CSI I on focus-in and CSI O on focus-out,
   // which Ink delivers to useInput as "[I" / "[O" (see key handler below).
@@ -546,6 +587,20 @@ export function App({ initial, paths }: Props) {
     setMessage({ text, ok });
     setErrorDetail(null);
   }, []);
+
+  // Open the selected branch's PR (or its stack) on Graphite. Builds the URL
+  // ourselves rather than shelling to `gt pr`, which errors on PRs missing from
+  // gt's cache (e.g. ones discovered from GitHub). Shared by the o/O keys.
+  const openGraphitePr = useCallback(
+    (stack: boolean, label: string) => {
+      const pr = selectedRow?.branch.pr;
+      if (!pr) return notify("No PR for this branch", false);
+      const url = graphitePrUrl(data.repoRoot, pr.prNumber, stack);
+      if (url) runAction(label, () => gt.openUrl(url));
+      else notify("No Graphite remote found", false);
+    },
+    [selectedRow, data.repoRoot, runAction, notify]
+  );
 
   // Focus the command-log panel, placing the cursor on the newest line.
   const focusLogs = useCallback(() => {
@@ -1024,14 +1079,9 @@ export function App({ initial, paths }: Props) {
         runAction(`checking out ${name}`, () => gt.checkout(data.repoRoot, name));
       }
     } else if (input === "o") {
-      if (selectedRow?.branch.pr)
-        runAction("opening PR", () => gt.openPr(data.repoRoot, selectedRow.branch.name));
-      else notify("No PR for this branch", false);
+      openGraphitePr(false, "opening PR");
     } else if (input === "O") {
-      if (selectedRow)
-        runAction("opening stack", () =>
-          gt.openPr(data.repoRoot, selectedRow.branch.name, true)
-        );
+      openGraphitePr(true, "opening stack");
     } else if (input === "g") {
       if (selectedRow?.branch.pr) {
         const url = githubPrUrl(data.repoRoot, selectedRow.branch.pr.prNumber);
