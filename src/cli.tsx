@@ -50,6 +50,7 @@ async function main() {
         through: r.through,
         mergeFrom: r.mergeFrom,
         isCurrent: r.isCurrent,
+        detached: r.detached,
         isTrunk: r.branch.isTrunk,
         pr: r.branch.pr
           ? {

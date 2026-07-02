@@ -99,4 +99,46 @@ describe("buildRenderRows", () => {
     const rows = buildRenderRows(data);
     expect(rows.map((r) => r.branch.name).sort()).toEqual(["a", "develop"]);
   });
+
+  it("surfaces the current branch as a detached row when it's unreachable", () => {
+    const data = makeData(
+      [
+        b({ name: "develop", isTrunk: true, children: ["a"] }),
+        b({ name: "a", parent: "develop" }),
+        // In metadata but with no parent (gt's BAD_PARENT_NAME), so the walk
+        // from trunk never reaches it — mirrors a plain-git checkout/fetch.
+        b({ name: "fetched-work", validationResult: "BAD_PARENT_NAME" as never }),
+      ],
+      "fetched-work"
+    );
+    const rows = buildRenderRows(data);
+    // The detached current branch is surfaced first (top), then the stack.
+    expect(rows.map((r) => r.branch.name)).toEqual([
+      "fetched-work",
+      "a",
+      "develop",
+    ]);
+    const orphan = rows[0];
+    expect(orphan.detached).toBe(true);
+    expect(orphan.isCurrent).toBe(true);
+    // Isolated: column 0, no edges.
+    expect(orphan.column).toBe(0);
+    expect(orphan.mergeFrom).toEqual([]);
+    expect(orphan.through.every((t) => t === false)).toBe(true);
+    // Rows that ARE in the stack aren't flagged detached.
+    expect(rows.find((r) => r.branch.name === "a")!.detached).toBe(false);
+  });
+
+  it("does not surface the current branch when it's already in the stack", () => {
+    const data = makeData(
+      [
+        b({ name: "develop", isTrunk: true, children: ["a"] }),
+        b({ name: "a", parent: "develop" }),
+      ],
+      "a"
+    );
+    const rows = buildRenderRows(data);
+    expect(rows.map((r) => r.branch.name)).toEqual(["a", "develop"]);
+    expect(rows.every((r) => r.detached === false)).toBe(true);
+  });
 });

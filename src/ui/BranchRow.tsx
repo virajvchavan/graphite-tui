@@ -93,6 +93,11 @@ export function BranchRow({
   // up vertically across rows; variable indicators (comments, restack,
   // ahead/behind) sit to their left.
   const meta: Segment[] = [];
+  if (row.detached) {
+    // Not part of any stack — gt has no parent for it. Flag it so it's clear
+    // this row is a checked-out branch outside the graph, not a stack tip.
+    meta.push({ text: " ○ not in stack", color: colors.warning });
+  }
   if (threadCounts && threadCounts.total > 0) {
     meta.push({
       text: ` 💬 ${threadCounts.resolved}/${threadCounts.total}`,

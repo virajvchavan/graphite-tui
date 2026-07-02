@@ -1054,6 +1054,16 @@ export function App({ initial, paths }: Props) {
       setMode("input");
     } else if (input === "r") {
       runAction("restacking", () => gt.restack(data.repoRoot));
+    } else if (input === "T") {
+      // Track a detached branch (checked out with plain git, so gt has no
+      // parent for it) onto its nearest tracked ancestor, pulling it into the
+      // stack. Only detached rows need this; tracked branches are a no-op.
+      if (selectedRow?.detached) {
+        const name = selectedRow.branch.name;
+        runAction(`tracking ${name}`, () => gt.trackBranch(data.repoRoot, name));
+      } else if (selectedRow) {
+        notify("Branch is already tracked", false);
+      }
     } else if (input === "S") {
       if (selectedRow && !selectedRow.branch.isTrunk) {
         const name = selectedRow.branch.name;
@@ -1436,8 +1446,11 @@ export function App({ initial, paths }: Props) {
                         ? FILES_COLLAPSED_HINT
                         : FILES_HINT
                       : errorDetail
-                        ? [["e", "error details"], ...normalHint(!!selBranch?.isTrunk)]
-                        : normalHint(!!selBranch?.isTrunk)
+                        ? [
+                            ["e", "error details"],
+                            ...normalHint(!!selBranch?.isTrunk, !!selectedRow?.detached),
+                          ]
+                        : normalHint(!!selBranch?.isTrunk, !!selectedRow?.detached)
           }
         />
       </Box>

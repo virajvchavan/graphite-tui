@@ -146,6 +146,14 @@ export const deleteBranch = (repoRoot: string, branch: string) =>
 export const getBranch = (repoRoot: string, branch: string) =>
   runGt(repoRoot, ["get", branch], `Got ${branch}`);
 
+/**
+ * Start tracking a branch Graphite doesn't know about (or whose metadata is
+ * corrupt), placing it under its nearest already-tracked ancestor. `--force`
+ * infers that parent from git history so it runs without a prompt.
+ */
+export const trackBranch = (repoRoot: string, branch: string) =>
+  runGt(repoRoot, ["track", branch, "--force"], `Tracked ${branch}`);
+
 /** Open an arbitrary URL in the default browser, cross-platform. */
 export async function openUrl(url: string): Promise<ActionResult> {
   const cmd =

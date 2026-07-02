@@ -29,10 +29,19 @@ export const NORMAL_HINT: Array<[string, string]> = [
 // the selected row is trunk.
 const TRUNK_OMIT_KEYS = new Set(["o", "g", "r", "S", "d"]);
 
-export function normalHint(selectedIsTrunk: boolean): Array<[string, string]> {
-  return selectedIsTrunk
-    ? NORMAL_HINT.filter(([key]) => !TRUNK_OMIT_KEYS.has(key))
-    : NORMAL_HINT;
+export function normalHint(
+  selectedIsTrunk: boolean,
+  selectedIsDetached = false
+): Array<[string, string]> {
+  if (selectedIsTrunk) {
+    return NORMAL_HINT.filter(([key]) => !TRUNK_OMIT_KEYS.has(key));
+  }
+  // A detached branch (not in any stack) isn't submittable/restackable yet —
+  // its one useful action is `T track`, so lead with that.
+  if (selectedIsDetached) {
+    return [["T", "track"], ...NORMAL_HINT];
+  }
+  return NORMAL_HINT;
 }
 
 // Working-tree hints. The amend/commit (off trunk) and create-branch (on trunk)

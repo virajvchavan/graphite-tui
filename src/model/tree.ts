@@ -82,14 +82,23 @@ export function buildRenderRows(data: RepoData): RenderRow[] {
   pre.forEach((p, i) => rowIndex.set(p.branch.name, i));
 
   const maxColumn = pre.reduce((m, p) => Math.max(m, p.column), 0);
-  const rows: RenderRow[] = pre.map((p) => ({
-    branch: p.branch,
-    depth: p.depth,
-    column: p.column,
+  // Every row starts edge-free (its own mutable `through`/`mergeFrom`, filled in
+  // by the edge pass below or left empty for an isolated node).
+  const makeRow = (
+    branch: Branch,
+    depth: number,
+    column: number,
+    detached: boolean
+  ): RenderRow => ({
+    branch,
+    depth,
+    column,
     through: new Array(maxColumn + 1).fill(false),
     mergeFrom: [],
-    isCurrent: p.branch.name === currentBranch,
-  }));
+    isCurrent: branch.name === currentBranch,
+    detached,
+  });
+  const rows: RenderRow[] = pre.map((p) => makeRow(p.branch, p.depth, p.column, false));
 
   // Compute edges (child -> parent). Child is above (smaller index) its parent.
   for (let i = 0; i < pre.length; i++) {
@@ -110,6 +119,23 @@ export function buildRenderRows(data: RepoData): RenderRow[] {
     if (column !== parentColumn) {
       rows[pIdx].mergeFrom.push(column);
     }
+  }
+
+  // The current branch can be absent from the walk above: gt records a branch
+  // created outside `gt create` (plain checkout/fetch) with no parent
+  // (validationResult BAD_PARENT_NAME), or doesn't track it at all — either way
+  // it's unreachable from trunk. Rather than let the branch you're actively on
+  // silently vanish, surface it as an isolated node at the top, flagged
+  // detached. Only the current branch is surfaced this way; the many other
+  // unreachable local branches (stale, merged, gt's own base refs) stay hidden.
+  const detachedBranch =
+    currentBranch != null &&
+    currentBranch !== trunk &&
+    !rowIndex.has(currentBranch)
+      ? branches.get(currentBranch)
+      : undefined;
+  if (detachedBranch) {
+    return [makeRow(detachedBranch, 0, 0, true), ...rows];
   }
 
   return rows;

@@ -19,6 +19,7 @@ const KEYS: [string, string][] = [
   ["o / O", "open PR / stack on Graphite"],
   ["g", "open PR on GitHub"],
   ["G", "get a remote branch/stack (gt get)"],
+  ["T", "track a detached branch onto its parent (gt track)"],
   ["r", "restack"],
   ["S", "submit stack"],
   ["d", "delete branch (confirm)"],

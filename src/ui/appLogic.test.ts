@@ -71,6 +71,16 @@ describe("normalHint", () => {
     expect(keys).toContain("s");
     expect(keys).toContain("/");
   });
+
+  it("leads with T track when a detached branch is selected", () => {
+    const keys = normalHint(false, true).map(([k]) => k);
+    expect(keys[0]).toBe("T");
+    expect(keys).toContain("S"); // still the full list beyond the lead
+  });
+
+  it("omits T track for a normal (non-detached) branch", () => {
+    expect(normalHint(false).map(([k]) => k)).not.toContain("T");
+  });
 });
 
 describe("worktreeHint", () => {

@@ -155,4 +155,12 @@ export interface RenderRow {
   mergeFrom: number[];
   /** True if this branch is the current checked-out branch. */
   isCurrent: boolean;
+  /**
+   * True when this row was surfaced outside the stack graph because the branch
+   * isn't reachable from any trunk — e.g. the current branch after a plain
+   * `git checkout`/`git fetch`, which Graphite records with no parent
+   * (validationResult BAD_PARENT_NAME) or doesn't track at all. Rendered as an
+   * isolated node so a branch you're actively on never silently disappears.
+   */
+  detached: boolean;
 }
