@@ -8,12 +8,67 @@ a replacement for the Graphite VSCode extension's "Branches" sidebar.
 
 
 Run `graphite-tui` inside any Graphite-initialized git repo and it renders the
-repo's stacks with dependency lines, PR status, and age, fully controllable by
-keyboard.
+repo's stacks with dependency lines, PR status, CI checks, review comments, and
+age — fully controllable by keyboard, with a live working-tree panel.
 
 
 https://github.com/user-attachments/assets/3c7a1c29-d26b-4399-a663-46d2605b48dc
 
+
+## Features
+
+**Stack view**
+
+- Renders every Graphite stack with ASCII dependency lines, so parent/child
+  relationships are visible at a glance.
+- Handles multiple independent stacks and standalone branches, and surfaces the
+  current branch even when it isn't part of a tracked stack.
+- Shows branch age and highlights the branch you're on.
+
+**PR & GitHub insight** (via `gh`)
+
+- PR number and status — draft, review, approved, or merged — color-coded per
+  row, refreshed live so a merge or approval elsewhere shows without a sync.
+- Discovers open PRs straight from GitHub for branches `gt` hasn't cached yet.
+- Live CI check status (`✓ passed` / `✗ failed` / `⧗ pending`) rolled up from
+  the PR's latest commit.
+- Review-comment thread counts (`💬 resolved/total`), colored by whether every
+  thread is resolved.
+
+**Stack health**
+
+- Flags branches that are out of date with their parent (`⇈ restack`).
+- During a paused `gt sync`/`gt restack`, flags the branch being rebased
+  (`⚠ conflict`) and shows a banner with the conflicted-file count.
+
+**Working tree**
+
+- Live panel of uncommitted changes — staged, unstaged, and untracked — with the
+  two-char git status and per-file line counts.
+- Stage/unstage (`a`/`u`/`space`), discard (`x`), and commit or amend
+  (`c`/`m`, mapped to `gt modify`/`gt create`) without leaving the TUI.
+
+**Changed files & diffs**
+
+- Per-branch changed-files panel (the PR's diff against its parent), colored by
+  git status and updated as you move between branches.
+- Full-screen diff overlay for any file.
+
+**Navigation & workflow**
+
+- Fully keyboard-driven; arrow keys cross between panels at list boundaries.
+- Fuzzy filter (`/`) by branch name or PR title.
+- Checkout, `gt sync`, `gt restack`, `gt submit --stack`, and branch delete.
+- Open a PR/stack on Graphite (`o`/`O`) or GitHub (`g`), and copy a PR URL or
+  branch name (`y`).
+- A session command-log panel records every `gt`/`git` command the TUI runs.
+
+**Feels native**
+
+- Auto-detects a light or dark terminal theme (override with
+  `GRAPHITE_TUI_THEME`).
+- Auto-refreshes via a filesystem watcher — including when you run `gt` in
+  another terminal — with an `R` manual refresh.
 
 ## Install
 
