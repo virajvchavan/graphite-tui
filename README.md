@@ -8,8 +8,8 @@ a replacement for the Graphite VSCode extension's "Branches" sidebar.
 
 
 Run `graphite-tui` inside any Graphite-initialized git repo and it renders the
-repo's stacks with dependency lines, PR status, and age, fully controllable by
-keyboard.
+repo's stacks with dependency lines, PR status, CI checks, review comments, and
+age — fully controllable by keyboard, with a live working-tree panel.
 
 ```
  GRAPHITE: BRANCHES  condor · develop                          press ? for help
