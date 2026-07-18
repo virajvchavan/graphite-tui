@@ -11,15 +11,9 @@ Run `graphite-tui` inside any Graphite-initialized git repo and it renders the
 repo's stacks with dependency lines, PR status, and age, fully controllable by
 keyboard.
 
-```
- GRAPHITE: BRANCHES  condor · develop                          press ? for help
 
- › ●    feat(forecasting): preserve percentage-split region…    #9268 review 2d
-   ◯    test(forecasting): cover region allocation …           #9266 review 2d
-   ◯    feat(forecasting): snapshot region allocation…         #9265 review 2d
-   │ ◯  refactor(reporting): extract shared monthly-chart…     #9351 merged 2d
-   ◯─┘  develop                                                            31h
-```
+https://github.com/user-attachments/assets/3c7a1c29-d26b-4399-a663-46d2605b48dc
+
 
 ## Install
 
