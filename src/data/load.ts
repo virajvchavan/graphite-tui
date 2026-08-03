@@ -44,16 +44,80 @@ export function computeNeedsRestack(
 }
 
 /**
+ * Drop metadata rows whose local git ref is gone. Graphite's SQLite cache keeps
+ * a row after the branch itself is deleted outside gt — a plain `git branch -D`,
+ * or a sync that pruned the ref but left the row behind — and `gt ls` hides
+ * those because it reconciles against real refs. Rendering them is worse than
+ * useless: the row looks actionable but every gt command on it fails with
+ * "Could not find branch <name>".
+ *
+ * Children of a pruned branch are spliced onto its nearest surviving ancestor,
+ * so a ghost in the middle of a stack doesn't take the live branches above it
+ * out of the tree (they're only reachable from trunk via `children`).
+ */
+export function pruneMissingBranches(
+  meta: Map<string, BranchMeta>,
+  localBranches: Set<string>
+): Map<string, BranchMeta> {
+  // An empty set means the ref listing failed, not that every branch is gone.
+  if (localBranches.size === 0) return meta;
+  const survives = (name: string): boolean => localBranches.has(name);
+  if ([...meta.keys()].every(survives)) return meta;
+
+  // Nearest ancestor that still exists, following recorded parent links.
+  const survivingAncestor = (name: string | null): string | null => {
+    const seen = new Set<string>();
+    let cur = name;
+    while (cur && !seen.has(cur)) {
+      if (survives(cur)) return cur;
+      seen.add(cur);
+      cur = meta.get(cur)?.parentBranchName ?? null;
+    }
+    return null;
+  };
+
+  // The surviving branches to attach in place of a pruned one: its own live
+  // children, plus (recursively) those of any pruned children.
+  const survivingDescendants = (name: string, seen: Set<string>): string[] => {
+    if (seen.has(name)) return [];
+    seen.add(name);
+    const children = meta.get(name)?.children ?? [];
+    return children.flatMap((c) =>
+      survives(c) ? [c] : survivingDescendants(c, seen)
+    );
+  };
+
+  const pruned = new Map<string, BranchMeta>();
+  for (const [name, m] of meta) {
+    if (!survives(name)) continue;
+    const children = m.children.flatMap((c) =>
+      survives(c) ? [c] : survivingDescendants(c, new Set([name]))
+    );
+    pruned.set(name, {
+      ...m,
+      parentBranchName: survivingAncestor(m.parentBranchName),
+      children: [...new Set(children)],
+    });
+  }
+  return pruned;
+}
+
+/**
  * Load the full repo data model: branch tree + PR info + ages + current branch.
  * Pure read; never mutates the repo.
  */
 export function loadRepoData(cwd: string): { data: RepoData; paths: RepoPaths } {
   const paths = resolveRepoPaths(cwd);
   const config = readRepoConfig(paths);
-  const meta = readBranchMetadata(paths);
+  const tracking = getBranchTracking(paths.repoRoot);
+  // `tracking` covers every local ref under refs/heads, so its keys double as
+  // the set of branches that actually exist.
+  const meta = pruneMissingBranches(
+    readBranchMetadata(paths),
+    new Set(tracking.keys())
+  );
   const prs = readPrInfo(paths);
   const ages = getBranchAges(paths.repoRoot);
-  const tracking = getBranchTracking(paths.repoRoot);
   const hasRemote = getRemoteWebUrl(paths.repoRoot) != null;
   const currentBranch = getCurrentBranch(paths.repoRoot);
   const rebase = readRebaseState(paths);
