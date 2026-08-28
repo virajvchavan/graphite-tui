@@ -149,16 +149,21 @@ export function BranchRow({
     meta.push({ text: ` ${(branch.age ?? "").padStart(ageW)}`, color: colors.age });
   }
 
-  const metaWidth = meta.reduce((n, s) => n + segWidth(s.text), 0);
   // arrow(2) + gutter(columnCount*2) + 1 space + title + spacer + metadata = width.
-  const spacerWidth = Math.max(
-    0,
-    width - 2 - columnCount * 2 - 1 - titleWidth - metaWidth
-  );
+  const gutterWidth = 2 + columnCount * 2 + 1;
+  const totalMeta = () => meta.reduce((n, s) => n + segWidth(s.text), 0);
+  // Nothing here may overflow `width`: Ink wraps an over-wide flex row onto a
+  // second line, which shows up as a blank gap in the middle of the graph.
+  // The title gives way first, then the leftmost (least important) indicators —
+  // the fixed #pr/status/age columns on the right are the last to go.
+  while (meta.length > 0 && gutterWidth + totalMeta() > width) meta.shift();
+  const metaWidth = totalMeta();
+  const titleCols = Math.max(0, Math.min(titleWidth, width - gutterWidth - metaWidth));
+  const spacerWidth = Math.max(0, width - gutterWidth - titleCols - metaWidth);
 
   const title = fit(
     `${branch.displayTitle}${branch.isTrunk ? " (trunk)" : ""}`,
-    titleWidth
+    titleCols
   );
 
   return (

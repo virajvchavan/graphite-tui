@@ -1248,12 +1248,13 @@ export function App({ initial, paths }: Props) {
   // Subtract the root Box's paddingX={1} (2 cols) so the branch list and file
   // panel share the same usable width and their right edges line up.
   const contentWidth = Math.min(totalWidth - 2, MAX_CONTENT_WIDTH);
-  // Reserve space for arrow(2) + gutter(2*cols) + metadata (CI icon, #pr,
-  // comments, badge, age, ahead/behind ~40). Under-reserving lets a metadata-
-  // heavy row overflow the row width and wrap, which shifts the graph gutter.
+  // Reserve space for arrow(2) + gutter(2*cols) + the space separating gutter
+  // from title(1) + metadata (CI icon, #pr, comments, badge, age,
+  // ahead/behind ~40). Under-reserving lets a metadata-heavy row overflow the
+  // row width and wrap, which shifts the graph gutter.
   const titleWidth = Math.max(
     20,
-    contentWidth - 2 - columnCount * 2 - 40
+    contentWidth - 2 - columnCount * 2 - 1 - 40
   );
 
   // Constrain the whole UI to the terminal height so neither a tall file list
