@@ -47,7 +47,7 @@ describe("buildGutter node glyphs", () => {
     expect(buildGutter(row(b({ name: "a" }), { isCurrent: true }), 1)[0].glyph).toBe(
       "●"
     );
-    expect(buildGutter(row(b({ name: "a" })), 1)[0].glyph).toBe("◯");
+    expect(buildGutter(row(b({ name: "a" })), 1)[0].glyph).toBe("○");
   });
 
   it("never marks the trunk as needing a restack", () => {
@@ -55,6 +55,6 @@ describe("buildGutter node glyphs", () => {
       row(b({ name: "develop", isTrunk: true, needsRestack: true })),
       1
     );
-    expect(cells[0].glyph).toBe("◯");
+    expect(cells[0].glyph).toBe("○");
   });
 });

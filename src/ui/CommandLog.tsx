@@ -130,8 +130,15 @@ export function CommandLog({
           {"  "}
           {entryCount} command{entryCount === 1 ? "" : "s"}
         </Text>
-        {hiddenAbove > 0 && <Text color={colors.dim}>{`  ↑ ${hiddenAbove} more`}</Text>}
-        {hiddenBelow > 0 && <Text color={colors.dim}>{`  ↓ ${hiddenBelow} more`}</Text>}
+        {/* Counted in lines, not commands: expanded output makes one command
+            many lines, so an unlabelled "more" reads as contradicting the
+            command count next to it. */}
+        {hiddenAbove > 0 && (
+          <Text color={colors.dim}>{`  ↑ ${hiddenAbove} lines`}</Text>
+        )}
+        {hiddenBelow > 0 && (
+          <Text color={colors.dim}>{`  ↓ ${hiddenBelow} lines`}</Text>
+        )}
       </Box>
 
       {window.map((line, i) => {
