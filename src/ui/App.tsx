@@ -24,7 +24,7 @@ import { getChangedFiles } from "../data/files.js";
 import { getWorkingStatus } from "../data/status.js";
 import { getBranchFileDiff, getWorktreeFileDiff } from "../data/diff.js";
 import { fetchPrStatus, fetchPrsByBranch } from "../data/comments.js";
-import { buildRenderRows } from "../model/tree.js";
+import { buildRenderRows, upstackOf } from "../model/tree.js";
 import { watchRepo, watchWorkingTree } from "../data/watch.js";
 import * as gt from "../actions/gt.js";
 import * as commandLog from "../actions/commandLog.js";
@@ -1139,32 +1139,51 @@ export function App({ initial, paths }: Props) {
               color: badge.color,
             });
         }
-        if (b.children.length)
+        const upstack = upstackOf(data.branches, b);
+        const doomed = [b, ...upstack];
+        if (upstack.length)
           delDetails.push({
-            label: b.children.length === 1 ? "Child branch" : "Children",
-            value: b.children.join(", "),
+            label: upstack.length === 1 ? "Also deletes" : `Also deletes (${upstack.length})`,
+            value: upstack.map((x) => x.name).join(", "),
           });
         if (b.age) delDetails.push({ label: "Last commit", value: `${b.age} ago` });
-        const consequences = ["Deletes the local branch (gt delete --force)."];
-        if (b.children.length)
+        const plural = (n: number, word: string) =>
+          `${n} ${word}${n === 1 ? "" : "es"}`;
+        const consequences = [
+          upstack.length
+            ? `Deletes this branch and ${plural(
+                upstack.length,
+                "branch"
+              )} stacked above it, locally (gt delete --force --upstack).`
+            : "Deletes the local branch (gt delete --force).",
+        ];
+        const unpushed = doomed.filter((x) => x.unpushed || x.ahead > 0);
+        if (unpushed.length)
           consequences.push(
-            `Its ${b.children.length} child branch${
-              b.children.length === 1 ? "" : "es"
-            } will be restacked onto ${b.parent ?? data.trunk}.`
+            upstack.length
+              ? `${plural(unpushed.length, "branch")} here have unpushed commits that will be lost.`
+              : "This branch has unpushed commits that will be lost."
           );
-        if (b.unpushed || b.ahead > 0)
-          consequences.push("This branch has unpushed commits that will be lost.");
-        if (b.pr && b.pr.state === "OPEN")
-          consequences.push(`PR #${b.pr.prNumber} stays open on GitHub.`);
+        const openPrs = doomed
+          .filter((x) => x.pr?.state === "OPEN")
+          .map((x) => `#${x.pr!.prNumber}`);
+        if (openPrs.length)
+          consequences.push(
+            `PR${openPrs.length === 1 ? "" : "s"} ${openPrs.join(", ")} stay${
+              openPrs.length === 1 ? "s" : ""
+            } open on GitHub.`
+          );
         setPendingConfirm({
-          title: "Delete branch?",
+          title: upstack.length ? "Delete branch and everything above it?" : "Delete branch?",
           target: name,
           details: delDetails,
           consequences,
-          confirmLabel: "Delete branch",
+          confirmLabel: upstack.length
+            ? `Delete ${doomed.length} branches`
+            : "Delete branch",
           run: () =>
             runAction(`deleting ${name}`, () =>
-              gt.deleteBranch(data.repoRoot, name)
+              gt.deleteBranch(data.repoRoot, name, upstack.length)
             ),
         });
         setMode("confirm");

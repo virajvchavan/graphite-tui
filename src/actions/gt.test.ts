@@ -83,6 +83,39 @@ describe("gt commands", () => {
     );
   });
 
+  it("delete takes the branch's upstack with it and never touches GitHub", async () => {
+    mockExeca.mockReturnValue(proc({ all: "" }));
+    const res = await gt.deleteBranch("/repo", "feature-x", 2);
+    expect(res).toEqual({
+      ok: true,
+      message: "Deleted feature-x and 2 branches above it",
+    });
+    expect(mockExeca).toHaveBeenCalledWith(
+      "gt",
+      [
+        "delete",
+        "feature-x",
+        "--force",
+        "--upstack",
+        "--cwd",
+        "/repo",
+        "--no-interactive",
+      ],
+      expect.anything()
+    );
+  });
+
+  it("delete reports just the branch when nothing is stacked on it", async () => {
+    mockExeca.mockReturnValue(proc({ all: "" }));
+    const res = await gt.deleteBranch("/repo", "feature-x");
+    expect(res.message).toBe("Deleted feature-x");
+    expect(mockExeca).toHaveBeenCalledWith(
+      "gt",
+      ["delete", "feature-x", "--force", "--cwd", "/repo", "--no-interactive"],
+      expect.anything()
+    );
+  });
+
   it("stageFile shells out to git (not gt) and reports the basename", async () => {
     mockExeca.mockReturnValue(proc({ all: "" }));
     const res = await gt.stageFile("/repo", "src/deep/file.ts");

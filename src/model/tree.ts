@@ -146,3 +146,25 @@ export function indexOfBranch(rows: RenderRow[], name: string | null): number {
   if (!name) return -1;
   return rows.findIndex((r) => r.branch.name === name);
 }
+
+/**
+ * Every branch stacked above `branch`, depth-first from its nearest children
+ * outward. Branches missing from the map (their local ref is gone) are skipped
+ * along with anything above them.
+ */
+export function upstackOf(
+  branches: Map<string, Branch>,
+  branch: Branch
+): Branch[] {
+  const out: Branch[] = [];
+  const walk = (b: Branch) => {
+    for (const name of b.children) {
+      const child = branches.get(name);
+      if (!child) continue;
+      out.push(child);
+      walk(child);
+    }
+  };
+  walk(branch);
+  return out;
+}

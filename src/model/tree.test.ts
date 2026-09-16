@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRenderRows } from "./tree.js";
+import { buildRenderRows, upstackOf } from "./tree.js";
 import type { Branch, RepoData } from "../types.js";
 
 function b(partial: Partial<Branch> & { name: string }): Branch {
@@ -140,5 +140,47 @@ describe("buildRenderRows", () => {
     const rows = buildRenderRows(data);
     expect(rows.map((r) => r.branch.name)).toEqual(["a", "develop"]);
     expect(rows.every((r) => r.detached === false)).toBe(true);
+  });
+});
+
+describe("upstackOf", () => {
+  it("collects the whole subtree above a branch", () => {
+    const data = makeData(
+      [
+        b({ name: "develop", isTrunk: true, children: ["a"] }),
+        b({ name: "a", parent: "develop", children: ["b1", "b2"] }),
+        b({ name: "b1", parent: "a", children: ["c"] }),
+        b({ name: "b2", parent: "a" }),
+        b({ name: "c", parent: "b1" }),
+      ],
+      "a"
+    );
+    const names = upstackOf(data.branches, data.branches.get("a")!).map(
+      (x) => x.name
+    );
+    expect(names.sort()).toEqual(["b1", "b2", "c"]);
+  });
+
+  it("returns nothing for a tip branch", () => {
+    const data = makeData(
+      [b({ name: "develop", isTrunk: true, children: ["a"] }), b({ name: "a", parent: "develop" })],
+      "a"
+    );
+    expect(upstackOf(data.branches, data.branches.get("a")!)).toEqual([]);
+  });
+
+  it("skips children whose branch is missing from the map", () => {
+    const data = makeData(
+      [
+        b({ name: "develop", isTrunk: true, children: ["a"] }),
+        b({ name: "a", parent: "develop", children: ["gone", "b"] }),
+        b({ name: "b", parent: "a" }),
+      ],
+      "a"
+    );
+    const names = upstackOf(data.branches, data.branches.get("a")!).map(
+      (x) => x.name
+    );
+    expect(names).toEqual(["b"]);
   });
 });

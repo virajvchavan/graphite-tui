@@ -136,8 +136,25 @@ export const submitBranch = (repoRoot: string, branch: string) =>
     `Submitted ${branch}`
   );
 
-export const deleteBranch = (repoRoot: string, branch: string) =>
-  runGt(repoRoot, ["delete", branch, "--force"], `Deleted ${branch}`);
+/**
+ * Delete `branch` locally, taking the branches stacked above it along with it
+ * (`--upstack`) instead of re-parenting them onto its parent. `gt delete` never
+ * touches the remote, so any pull requests stay open on GitHub.
+ */
+export const deleteBranch = (
+  repoRoot: string,
+  branch: string,
+  upstackCount = 0
+) =>
+  runGt(
+    repoRoot,
+    ["delete", branch, "--force", ...(upstackCount > 0 ? ["--upstack"] : [])],
+    upstackCount > 0
+      ? `Deleted ${branch} and ${upstackCount} branch${
+          upstackCount === 1 ? "" : "es"
+        } above it`
+      : `Deleted ${branch}`
+  );
 
 /**
  * Pull a remote branch — and its ancestors, so the whole stack lands locally —
