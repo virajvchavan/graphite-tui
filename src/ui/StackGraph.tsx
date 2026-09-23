@@ -12,7 +12,6 @@ interface Props {
   focused: boolean;
   /** Max width of the rows; bounds where right-aligned metadata sits. */
   width: number;
-  titleWidth: number;
   /** First visible branch row. */
   scrollOffset: number;
   /** Number of branch rows that fit. */
@@ -29,7 +28,6 @@ export function StackGraph({
   selectedIndex,
   focused,
   width,
-  titleWidth,
   scrollOffset,
   visible,
   conflictedBranches,
@@ -79,7 +77,6 @@ export function StackGraph({
             selected={absolute === selectedIndex}
             focused={focused}
             width={width}
-            titleWidth={titleWidth}
             prW={prW}
             statusW={statusW}
             ageW={ageW}

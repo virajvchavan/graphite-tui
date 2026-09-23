@@ -62,7 +62,6 @@ describe("BranchRow", () => {
             selected
             focused
             width={width}
-            titleWidth={Math.max(20, width - 2 - 3 * 2 - 1 - 40)}
             prW={6}
             statusW={7}
             ageW={3}
@@ -87,7 +86,6 @@ describe("BranchRow", () => {
           selected={false}
           focused={false}
           width={45}
-          titleWidth={20}
           prW={6}
           statusW={7}
           ageW={3}
@@ -100,5 +98,25 @@ describe("BranchRow", () => {
     expect(out[0]).toContain("#10007");
     expect(out[0]).toContain("52m");
     expect(out[0]).not.toContain("conflicts");
+  });
+
+  it("gives the title all the space the metadata leaves free", () => {
+    const out = lines(
+      render(
+        <BranchRow
+          row={row({ branch: branch({ ahead: 0, behind: 0 }) })}
+          columnCount={3}
+          selected={false}
+          focused={false}
+          width={90}
+          prW={6}
+          statusW={7}
+          ageW={3}
+          ciW={1}
+          ci="passed"
+        />
+      ).lastFrame() ?? ""
+    );
+    expect(out[0]).toContain("perf: counts-only IF upload response, chunked convert");
   });
 });

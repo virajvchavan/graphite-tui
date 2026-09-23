@@ -17,8 +17,6 @@ interface Props {
   focused: boolean;
   /** Total row width; bounds where the right-aligned metadata sits. */
   width: number;
-  /** Max width available for the title column. */
-  titleWidth: number;
   /** Fixed widths for the right-aligned CI, PR#, status, and age columns. */
   prW: number;
   statusW: number;
@@ -60,7 +58,6 @@ export function BranchRow({
   selected,
   focused,
   width,
-  titleWidth,
   prW,
   statusW,
   ageW,
@@ -158,7 +155,7 @@ export function BranchRow({
   // the fixed #pr/status/age columns on the right are the last to go.
   while (meta.length > 0 && gutterWidth + totalMeta() > width) meta.shift();
   const metaWidth = totalMeta();
-  const titleCols = Math.max(0, Math.min(titleWidth, width - gutterWidth - metaWidth));
+  const titleCols = Math.max(0, width - gutterWidth - metaWidth);
   const spacerWidth = Math.max(0, width - gutterWidth - titleCols - metaWidth);
 
   const title = fit(
