@@ -55,12 +55,13 @@ export interface PrLiveStatus {
   /** GitHub merge-conflict state against the PR's base branch. */
   mergeable: Mergeable;
   /**
-   * Live PR state and review decision. Graphite's `.graphite_pr_info` cache
+   * Live PR state, review decision, and draft flag. Graphite's `.graphite_pr_info` cache
    * only updates on `gt` activity (sync/submit), so a PR merged or approved
    * elsewhere stays stale there; these let a refresh reflect it immediately.
    */
   state: PrState;
   reviewDecision: ReviewDecision;
+  isDraft: boolean;
 }
 
 /** Entry from `.graphite_pr_info`, keyed by headRefName. */

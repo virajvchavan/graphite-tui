@@ -34,8 +34,8 @@ export function mapMergeable(state: unknown): Mergeable {
  * returns an empty map (never throws) when `gh` is missing, unauthenticated,
  * offline, or the remote isn't on GitHub. Threads are capped at the first 100
  * per PR (plenty in practice). CI status is read from the last commit's
- * statusCheckRollup. Also pulls live `state`/`reviewDecision` so a refresh can
- * show a PR merged or approved elsewhere without waiting for `gt` to rewrite
+ * statusCheckRollup. Also pulls live `state`/`reviewDecision`/`isDraft` so a refresh can
+ * show a PR merged, approved, or marked ready elsewhere without waiting for `gt` to rewrite
  * its `.graphite_pr_info` cache.
  */
 /**
@@ -78,7 +78,7 @@ export async function fetchPrStatus(
     .map(
       (n) =>
         `p${n}: pullRequest(number: ${n}) { ` +
-        `state reviewDecision mergeable ` +
+        `state reviewDecision isDraft mergeable ` +
         `reviewThreads(first: 100) { nodes { isResolved } } ` +
         `commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }`
     )
@@ -105,6 +105,7 @@ export async function fetchPrStatus(
       mergeable: mapMergeable(pr.mergeable),
       state: normalizeState(pr.state),
       reviewDecision: normalizeReview(pr.reviewDecision),
+      isDraft: Boolean(pr.isDraft),
     });
   }
   return result;

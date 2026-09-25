@@ -34,6 +34,7 @@ function live(over: Partial<PrLiveStatus>): PrLiveStatus {
     mergeable: "unknown",
     state: "OPEN",
     reviewDecision: null,
+    isDraft: false,
     ...over,
   };
 }
@@ -147,6 +148,12 @@ describe("prBadge", () => {
         live({ reviewDecision: "REVIEW_REQUIRED" })
       )
     ).toEqual({ text: "review", color: colors.reviewRequired });
+
+    // Cache still says draft, but the PR was marked ready on GitHub.
+    expect(prBadge(pr({ isDraft: true }), live({ isDraft: false }))).toEqual({
+      text: "open",
+      color: colors.dim,
+    });
   });
 });
 

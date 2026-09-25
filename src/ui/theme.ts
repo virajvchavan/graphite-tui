@@ -233,9 +233,10 @@ export function prBadge(
   if (!pr) return null;
   const state = live ? live.state : pr.state;
   const reviewDecision = live ? live.reviewDecision : pr.reviewDecision;
+  const isDraft = live ? live.isDraft : pr.isDraft;
   if (state === "MERGED") return { text: "merged", color: colors.merged };
   if (state === "CLOSED") return { text: "closed", color: colors.closed };
-  if (pr.isDraft) return { text: "draft", color: colors.draft };
+  if (isDraft) return { text: "draft", color: colors.draft };
   switch (reviewDecision) {
     case "APPROVED":
       return { text: "approved", color: colors.approved };
